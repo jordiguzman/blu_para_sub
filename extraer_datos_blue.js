@@ -16,7 +16,7 @@ require('dotenv').config({ path: path.join(__dirname, 'config', '.env') });
         console.log("✅ Sesión iniciada correctamente en Bluesky.");
 
         const handle = "juanmentat.bsky.social";
-        const rkey = "3mrih3akcza2b";
+        const rkey = "3mrvnmvhjd22p";
 
         console.log(`🔍 Resolviendo el perfil de ${handle}...`);
         const profile = await agent.getProfile({ actor: handle });
@@ -38,10 +38,17 @@ require('dotenv').config({ path: path.join(__dirname, 'config', '.env') });
 
         const postRecord = post.record;
         
+       // --- EXTRACCIÓN DE HASHTAGS ---
+        const textContent = postRecord.text || "";
+        const hashtagMatches = textContent.match(/#[^\s#]+/g) || [];
+        // Limpiamos posibles símbolos de puntuación pegados al final del hashtag
+        const cleanHashtags = hashtagMatches.map(tag => tag.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]$/, ""));
+
         // --- CONSTRUCCIÓN DEL JSON ---
         const postData = {
             uri: atUri,
-            text: postRecord.text || "",
+            text: textContent,
+            hashtags: cleanHashtags,
             createdAt: postRecord.createdAt || "",
             hasMedia: false,
             mediaType: null,

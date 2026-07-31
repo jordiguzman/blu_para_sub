@@ -68,7 +68,7 @@ require('dotenv').config({ path: path.join(__dirname, 'config', '.env') });
 
         await new Promise(r => setTimeout(r, 1500));
 
-       console.log("✍️ Leyendo el texto de Bluesky desde el post.json...");
+        console.log("✍️ Leyendo el texto de Bluesky desde el post.json...");
         const fs = require('fs');
         const jsonPath = path.join(__dirname, 'post.json');
         
@@ -81,11 +81,11 @@ require('dotenv').config({ path: path.join(__dirname, 'config', '.env') });
         const postData = JSON.parse(fs.readFileSync(jsonPath, 'utf-8'));
         
         // --- LIMPIEZA DE URLS PARA EVITAR TARJETAS EN SUBASTACK ---
-        // Expresión regular para quitar URLs del texto y que no salte el auto-embed
         let textoLimpio = postData.text.replace(/https?:\/\/[^\s]+/g, '').trim();
         
-        console.log("📝 Texto limpio (sin URLs automáticas):\n", textoLimpio);
+        console.log("📝 Texto limpio a inyectar:\n", textoLimpio);
 
+        // --- INYECCIÓN ÚNICA DEL TEXTO ---
         await page.evaluate((textToInsert) => {
             const activeElement = document.activeElement;
             if (activeElement) {
@@ -97,8 +97,7 @@ require('dotenv').config({ path: path.join(__dirname, 'config', '.env') });
 
         await new Promise(r => setTimeout(r, 2000));
 
-        // --- Buscamos el botón "Post" directamente por su texto exacto, en el
-        // momento en que ya debería estar habilitado (tras escribir el texto) ---
+        // --- Buscamos el botón "Post" una vez el texto ya está puesto ---
         console.log("🔍 Buscando el botón 'Post' entre todos los botones de la página...");
 
         const postButtonInfo = await page.evaluate(() => {
@@ -133,16 +132,16 @@ require('dotenv').config({ path: path.join(__dirname, 'config', '.env') });
         console.log("ℹ️ Resultado de la búsqueda del botón 'Post':", postButtonInfo);
 
         if (!postButtonInfo.found) {
-            console.log("⚠️ No se encontró ningún botón con texto exacto 'Post'. Revisa 'parecidos' arriba.");
-            console.log("🛑 Dejando el navegador abierto 10 segundos para verificar el resultado.");
+            console.log("⚠️ No se encontró ningún botón con texto exacto 'Post'.");
+            console.log("🛑 Dejando el navegador abierto 10 segundos para verificar.");
             await new Promise(r => setTimeout(r, 10000));
             await browser.close();
             return;
         }
 
         if (postButtonInfo.disabled) {
-            console.log("⚠️ El botón 'Post' existe pero está deshabilitado. No se pulsará.");
-            console.log("🛑 Dejando el navegador abierto 10 segundos para verificar el resultado.");
+            console.log("⚠️ El botón 'Post' existe pero está deshabilitado.");
+            console.log("🛑 Dejando el navegador abierto 10 segundos para verificar.");
             await new Promise(r => setTimeout(r, 10000));
             await browser.close();
             return;
@@ -156,6 +155,7 @@ require('dotenv').config({ path: path.join(__dirname, 'config', '.env') });
             { timeout: 10000 }
         ).catch(() => null);
 
+        // Hacemos clic real en el botón "Post"
         await page.evaluate(() => {
             const buttons = Array.from(document.querySelectorAll('button'));
             const el = buttons.find(b => b.textContent.trim() === 'Post');
@@ -169,10 +169,10 @@ require('dotenv').config({ path: path.join(__dirname, 'config', '.env') });
             if (publishResponse.ok()) {
                 console.log(`🎉 Confirmado por red: la nota se publicó correctamente (HTTP ${status}, ${publishResponse.url()})`);
             } else {
-                console.log(`❌ La petición de publicación respondió con error (HTTP ${status}, ${publishResponse.url()}). NO se publicó.`);
+                console.log(`❌ La petición de publicación respondió con error (HTTP ${status}). NO se publicó.`);
             }
         } else {
-            console.log("⚠️ No se detectó ninguna petición de publicación tras el clic. Revisa la ventana del navegador para confirmar visualmente.");
+            console.log("⚠️ No se detectó ninguna petición de publicación tras el clic. Revisa la ventana del navegador.");
         }
 
         console.log("🛑 Dejando el navegador abierto 10 segundos para verificar el resultado.");
