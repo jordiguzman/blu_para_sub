@@ -16,7 +16,7 @@ require('dotenv').config({ path: path.join(__dirname, 'config', '.env') });
         console.log("✅ Sesión iniciada correctamente en Bluesky.");
 
         const handle = "juanmentat.bsky.social";
-        const rkey = "3mrvnmvhjd22p";
+        const rkey = "3ms2dvqsgdk2a";
 
         console.log(`🔍 Resolviendo el perfil de ${handle}...`);
         const profile = await agent.getProfile({ actor: handle });
@@ -71,6 +71,18 @@ require('dotenv').config({ path: path.join(__dirname, 'config', '.env') });
                     title: postRecord.embed.external.title,
                     description: postRecord.embed.external.description,
                     thumbUrl: post.embed?.external?.thumb?.ref ? `https://cdn.bsky.social/img/feed_thumbnail/plain/${repoDid}/${post.embed.external.thumb.ref.toString()}` : null
+                };
+            }
+
+            // --- VÍDEO: se sirve como stream HLS (playlist .m3u8), no como
+            // archivo descargable directo. Guardamos lo que la API nos dé para
+            // decidir después cómo tratarlo. ---
+            if (postRecord.embed.$type === 'app.bsky.embed.video') {
+                postData.video = {
+                    playlist: post.embed?.playlist || null, // URL del .m3u8
+                    thumbnail: post.embed?.thumbnail || null,
+                    alt: postRecord.embed.alt || null,
+                    aspectRatio: postRecord.embed.aspectRatio || null,
                 };
             }
         }

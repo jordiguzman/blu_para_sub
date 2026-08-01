@@ -1,13 +1,19 @@
 {
-  "uri": "at://did:plc:7rxajtbhdi4fpelalnmu35it/app.bsky.feed.post/3mrvnmvhjd22p",
-  "text": "Test text with hashtags. \n\n#test #hashtags",
-  "hashtags": [
-    "#test",
-    "#hashtags"
-  ],
-  "createdAt": "2026-07-31T00:01:58.645Z",
-  "hasMedia": false,
-  "mediaType": null,
+  "uri": "at://did:plc:7rxajtbhdi4fpelalnmu35it/app.bsky.feed.post/3ms2dvqsgdk2a",
+  "text": "What if Brave New World had a soundtrack? I'm working on a concept album imagining the score for a film that was never made. Planned for September. This is The Savage, one of the tracks.",
+  "hashtags": [],
+  "createdAt": "2026-08-01T20:51:17.022Z",
+  "hasMedia": true,
+  "mediaType": "app.bsky.embed.video",
   "mediaUrls": [],
-  "externalLink": null
+  "externalLink": null,
+  "video": {
+    "playlist": "https://video.bsky.app/watch/did%3Aplc%3A7rxajtbhdi4fpelalnmu35it/bafkreidmw3cmz3h7zy2xe6tp5hd2bnjgurkqtzwuxw5pdlxvcasxncozse/playlist.m3u8",
+    "thumbnail": "https://video.bsky.app/watch/did%3Aplc%3A7rxajtbhdi4fpelalnmu35it/bafkreidmw3cmz3h7zy2xe6tp5hd2bnjgurkqtzwuxw5pdlxvcasxncozse/thumbnail.jpg",
+    "alt": null,
+    "aspectRatio": {
+      "height": 1080,
+      "width": 1920
+    }
+  }
 }
