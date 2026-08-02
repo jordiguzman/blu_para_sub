@@ -1,19 +1,15 @@
 {
-  "uri": "at://did:plc:7rxajtbhdi4fpelalnmu35it/app.bsky.feed.post/3ms2dvqsgdk2a",
-  "text": "What if Brave New World had a soundtrack? I'm working on a concept album imagining the score for a film that was never made. Planned for September. This is The Savage, one of the tracks.",
-  "hashtags": [],
-  "createdAt": "2026-08-01T20:51:17.022Z",
+  "uri": "at://did:plc:7rxajtbhdi4fpelalnmu35it/app.bsky.feed.post/3mrxjurytgk2x",
+  "text": "XKCD: Main Span\n\n#xkcd #comic\nLink: https://xkcd.com/3279/",
+  "hashtags": [
+    "#xkcd",
+    "#comic"
+  ],
+  "createdAt": "2026-07-31T18:00:07Z",
   "hasMedia": true,
-  "mediaType": "app.bsky.embed.video",
-  "mediaUrls": [],
-  "externalLink": null,
-  "video": {
-    "playlist": "https://video.bsky.app/watch/did%3Aplc%3A7rxajtbhdi4fpelalnmu35it/bafkreidmw3cmz3h7zy2xe6tp5hd2bnjgurkqtzwuxw5pdlxvcasxncozse/playlist.m3u8",
-    "thumbnail": "https://video.bsky.app/watch/did%3Aplc%3A7rxajtbhdi4fpelalnmu35it/bafkreidmw3cmz3h7zy2xe6tp5hd2bnjgurkqtzwuxw5pdlxvcasxncozse/thumbnail.jpg",
-    "alt": null,
-    "aspectRatio": {
-      "height": 1080,
-      "width": 1920
-    }
-  }
+  "mediaType": "app.bsky.embed.images",
+  "mediaUrls": [
+    "https://cdn.bsky.app/img/feed_fullsize/plain/did:plc:7rxajtbhdi4fpelalnmu35it/bafkreigfctk5gsxqwtvgw3z62uij57wqyqwuc4s7rqunxk3lqnvagwpazm"
+  ],
+  "externalLink": null
 }

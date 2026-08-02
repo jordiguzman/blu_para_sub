@@ -16,7 +16,7 @@ require('dotenv').config({ path: path.join(__dirname, 'config', '.env') });
         console.log("✅ Sesión iniciada correctamente en Bluesky.");
 
         const handle = "juanmentat.bsky.social";
-        const rkey = "3ms2dvqsgdk2a";
+        const rkey = "3mrxjurytgk2x";
 
         console.log(`🔍 Resolviendo el perfil de ${handle}...`);
         const profile = await agent.getProfile({ actor: handle });
