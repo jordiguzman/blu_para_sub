@@ -3,7 +3,7 @@ const path = require('path');
 const fs = require('fs');
 
 (async () => {
-    console.log("🤖 [ORQUESTADOR] Iniciando ciclo de revisión...");
+    console.log("🔍 [ORQUESTADOR - MODO DIAGNÓSTICO] Iniciando prueba de extracción...");
 
     try {
         console.log("Step 1: Ejecutando extractor de Bluesky...");
@@ -11,19 +11,19 @@ const fs = require('fs');
 
         const jsonPath = path.join(__dirname, 'post.json');
         
-        // Comprobamos si el extractor ha generado un post para publicar
         if (!fs.existsSync(jsonPath)) {
-            console.log("📭 No hay trabajo pendiente. Ciclo del orquestador finalizado.");
+            console.log("📭 El extractor no ha generado ningún post.json.");
             process.exit(0);
         }
 
-        console.log("Step 2: Ejecutando publicador en Substack...");
-        execSync('node 2_publicar_substack.js', { stdio: 'inherit', cwd: __dirname });
-
-        console.log("✅ Ciclo completado con éxito.");
+        console.log("\n📦 Leyendo el post.json generado para validación:");
+        const postData = JSON.parse(fs.readFileSync(jsonPath, 'utf-8'));
+        console.log(JSON.stringify(postData, null, 2));
+        console.log("\n--------------------------------------------------");
+        console.log("🛑 Diagnóstico finalizado. No se llama a Substack. ¿Coincide este JSON con el que funcionaba?");
 
     } catch (error) {
-        console.error("❌ Error crítico en el orquestador:", error);
+        console.error("❌ Error en el diagnóstico del orquestador:", error);
         process.exit(1);
     }
 })();
