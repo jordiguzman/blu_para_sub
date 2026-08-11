@@ -75,11 +75,6 @@ function descargarImagen(url, destino) {
         }
         const postData = JSON.parse(fs.readFileSync(jsonPath, 'utf-8'));
 
-        // Solo quitamos URLs del cuerpo del texto cuando es un enlace externo
-        // (tipo Bandcamp), porque en ese caso la añadimos aparte más abajo.
-        // En cualquier otro caso, conservamos el texto tal cual -incluidas sus
-        // URLs- para no perder enlaces que el propio Bluesky ya detectó dentro
-        // del texto original.
         const esEnlaceExterno = postData.mediaType === 'app.bsky.embed.external';
         const textoCompleto = esEnlaceExterno
             ? postData.text.replace(/https?:\/\/[^\s]+/g, '').trim()
@@ -89,72 +84,76 @@ function descargarImagen(url, destino) {
         await page.keyboard.type(textoCompleto, { delay: 40 });
         await new Promise(r => setTimeout(r, 2000));
 
-        // --- ENLACE EXTERNO (Bandcamp, etc.): la URL no vive en el texto visible
-        // del post original, solo en externalLink. Hay que teclearla para que el
-        // editor de Substack la reconozca y genere la tarjeta automáticamente. ---
+        // --- ENLACE EXTERNO ---
         if (postData.mediaType === 'app.bsky.embed.external' && postData.externalLink && postData.externalLink.uri) {
             console.log(`🔗 Añadiendo enlace externo: ${postData.externalLink.uri}`);
             await page.keyboard.type('\n\n' + postData.externalLink.uri, { delay: 40 });
 
             console.log("⏳ Esperando a que el editor genere la tarjeta de vista previa...");
             await new Promise(r => setTimeout(r, 4000));
-
-            const screenshotPathLink = path.join(__dirname, 'debug_enlace_externo.png');
-            await page.screenshot({ path: screenshotPathLink, fullPage: false });
-            console.log(`📸 Captura tras añadir el enlace guardada en: ${screenshotPathLink}`);
         }
 
-        // --- IMAGEN: si el post tiene mediaUrls, la descargamos y la subimos ---
+        // --- MÚLTIPLES IMÁGENES: Descargar y subir el array completo ---
         if (postData.hasMedia && postData.mediaUrls && postData.mediaUrls.length > 0) {
-            const imageUrl = postData.mediaUrls[0];
             const tempDir = path.join(__dirname, 'temp_media');
-            const imagePath = path.join(tempDir, 'imagen_temp.jpg');
-
-            console.log(`⬇️ Descargando imagen desde: ${imageUrl}`);
-            await descargarImagen(imageUrl, imagePath);
-            console.log(`✅ Imagen descargada en: ${imagePath}`);
-
-            console.log("🔍 Buscando el input de subida de archivo dentro del editor...");
-
-            // Diagnóstico: listamos TODOS los inputs de tipo file de la página,
-            // por si hay más de uno y hay que elegir el correcto.
-            const inputsInfo = await page.evaluate(() => {
-                const inputs = Array.from(document.querySelectorAll('input[type="file"]'));
-                return inputs.map((el, i) => ({
-                    index: i,
-                    accept: el.getAttribute('accept'),
-                    visible: el.offsetParent !== null,
-                    clase: (el.className || '').toString().slice(0, 80),
-                }));
-            });
-            console.log("ℹ️ Inputs de archivo encontrados:", inputsInfo);
-
-            if (inputsInfo.length === 0) {
-                console.log("⚠️ No se encontró ningún input de tipo file en la página. Puede que haga falta pulsar antes un icono de 'adjuntar imagen'.");
-                console.log("🛑 Dejando el navegador abierto 10 segundos para revisar visualmente.");
-                await new Promise(r => setTimeout(r, 10000));
-                await browser.close();
-                return;
+            if (!fs.existsSync(tempDir)) {
+                fs.mkdirSync(tempDir, { recursive: true });
             }
 
-            // Nos quedamos con el primero que acepte imágenes, o el primero a secas.
-            const targetIndex = inputsInfo.findIndex(i => i.accept && i.accept.includes('image'));
-            const chosenIndex = targetIndex !== -1 ? targetIndex : 0;
-            console.log(`🎯 Usando el input número ${chosenIndex} (accept="${inputsInfo[chosenIndex].accept}")`);
+            const localImagePaths = [];
 
-            const fileInputHandle = await page.$$('input[type="file"]');
-            await fileInputHandle[chosenIndex].uploadFile(imagePath);
-            console.log("📤 Archivo entregado al input. Esperando a que se procese...");
+            // 1. Descargamos todas las imágenes del array
+            for (let i = 0; i < postData.mediaUrls.length; i++) {
+                const imageUrl = postData.mediaUrls[i];
+                const imagePath = path.join(tempDir, `imagen_temp_${i + 1}.jpg`);
+                
+                console.log(`⬇️ [${i + 1}/${postData.mediaUrls.length}] Descargando imagen...`);
+                try {
+                    await descargarImagen(imageUrl, imagePath);
+                    localImagePaths.push(imagePath);
+                    console.log(`✅ Guardada en: ${imagePath}`);
+                } catch (imgErr) {
+                    console.error(`❌ Error descargando la imagen ${i + 1}: ${imgErr.message}`);
+                }
+            }
 
-            // Esperamos a que aparezca en el DOM un <img> nuevo dentro del compositor,
-            // como señal de que la subida terminó y se insertó en el documento.
-            await new Promise(r => setTimeout(r, 5000));
+            if (localImagePaths.length > 0) {
+                console.log("🔍 Buscando el input de subida de archivo dentro del editor...");
+                
+                const inputsInfo = await page.evaluate(() => {
+                    const inputs = Array.from(document.querySelectorAll('input[type="file"]'));
+                    return inputs.map((el, i) => ({
+                        index: i,
+                        accept: el.getAttribute('accept'),
+                        visible: el.offsetParent !== null,
+                    }));
+                });
 
-            const screenshotPath = path.join(__dirname, 'debug_imagen_subida.png');
+                if (inputsInfo.length === 0) {
+                    console.log("⚠️ No se encontró ningún input de tipo file en la página.");
+                } else {
+                    const targetIndex = inputsInfo.findIndex(i => i.accept && i.accept.includes('image'));
+                    const chosenIndex = targetIndex !== -1 ? targetIndex : 0;
+                    console.log(`🎯 Usando el input número ${chosenIndex}`);
+
+                    const fileInputHandles = await page.$$('input[type="file"]');
+                    const targetInput = fileInputHandles[chosenIndex];
+
+                    // Subimos TODAS las rutas de golpe al input (Puppeteer permite pasar arrays de ficheros)
+                    await targetInput.uploadFile(...localImagePaths);
+                    console.log(`📤 ${localImagePaths.length} archivos entregados al input simultáneamente.`);
+
+                    console.log("⏳ Esperando a que Substack procese y suba las imágenes...");
+                    // Damos un margen generoso para que carguen las 3 fotos
+                    await new Promise(r => setTimeout(r, 8000));
+                }
+            }
+
+            const screenshotPath = path.join(__dirname, 'debug_imagenes_subidas.png');
             await page.screenshot({ path: screenshotPath, fullPage: false });
-            console.log(`📸 Captura tras subir la imagen guardada en: ${screenshotPath}`);
+            console.log(`📸 Captura guardada en: ${screenshotPath}`);
         } else {
-            console.log("ℹ️ Este post no tiene imagen, se publica solo texto.");
+            console.log("ℹ️ Este post no tiene imágenes adjuntas.");
         }
 
         console.log("🔍 Buscando el botón 'Post'...");
@@ -169,10 +168,8 @@ function descargarImagen(url, destino) {
             return { found: true, disabled: isDisabled };
         });
 
-        console.log("ℹ️ Resultado búsqueda botón 'Post':", postButtonInfo);
-
         if (!postButtonInfo.found || postButtonInfo.disabled) {
-            console.log("⚠️ El botón 'Post' no está disponible o sigue deshabilitado (¿la imagen aún se está procesando?).");
+            console.log("⚠️ El botón 'Post' no está disponible o sigue deshabilitado (las imágenes pueden seguir procesándose).");
             console.log("🛑 Dejando el navegador abierto 10 segundos para revisar.");
             await new Promise(r => setTimeout(r, 10000));
             await browser.close();

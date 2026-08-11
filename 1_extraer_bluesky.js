@@ -8,6 +8,25 @@ const HISTORY_FILE = path.join(__dirname, 'history.json');
 const POST_JSON_FILE = path.join(__dirname, 'post.json');
 const SCRIPT_2_PATH = path.join(__dirname, '2_publicar_substack.js');
 
+// Función auxiliar para crear pausas (en milisegundos)
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+// Función auxiliar para ejecutar el script 2 usando Promesas
+const runPublisher = () => {
+    return new Promise((resolve, reject) => {
+        exec(`node "${SCRIPT_2_PATH}"`, (error, stdout, stderr) => {
+            if (error) {
+                return reject(error);
+            }
+            if (stderr) {
+                console.error(`⚠️ Avisos del publicador: ${stderr}`);
+            }
+            console.log(stdout);
+            resolve();
+        });
+    });
+};
+
 (async () => {
     console.log("🚀 [EXTRACTOR BLUESKY] Conectando a la API...");
 
@@ -91,91 +110,111 @@ const SCRIPT_2_PATH = path.join(__dirname, '2_publicar_substack.js');
             return;
         }
 
-        const targetPostInfo = pendingPosts[0];
-        
-        console.log(`🎯 ¡Post pendiente NUEVO encontrado! rkey: ${targetPostInfo.rkey}`);
-        console.log(`📄 Texto: "${targetPostInfo.post.record.text || ""}"`);
+        console.log(`🎯 Se han encontrado ${pendingPosts.length} posts pendientes de publicar.`);
 
-        console.log(`📡 Obteniendo datos detallados...`);
-        const response = await agent.getPosts({
-            uris: [targetPostInfo.uri],
-        });
+        // Invertimos para publicarlos del más antiguo al más nuevo de los acumulados
+        pendingPosts.reverse();
 
-        const post = response.data.posts[0];
-        if (!post) {
-            console.error("❌ No se ha podido recuperar el detalle del post.");
-            return;
+        // Iteramos por cada post pendiente
+        for (let i = 0; i < pendingPosts.length; i++) {
+            const targetPostInfo = pendingPosts[i];
+            
+            console.log(`\n--- Procesando post [${i + 1} de ${pendingPosts.length}] rkey: ${targetPostInfo.rkey} ---`);
+            console.log(`📄 Texto: "${targetPostInfo.post.record.text || ""}"`);
+
+            console.log(`📡 Obteniendo datos detallados...`);
+            const response = await agent.getPosts({
+                uris: [targetPostInfo.uri],
+            });
+
+            const post = response.data.posts[0];
+            if (!post) {
+                console.error("❌ No se ha podido recuperar el detalle del post. Saltando al siguiente...");
+                continue;
+            }
+
+            const postRecord = post.record;
+
+            const textContent = postRecord.text || "";
+            const hashtagMatches = textContent.match(/#[^\s#]+/g) || [];
+            const cleanHashtags = hashtagMatches.map(tag => tag.replace(/[\.,\/#!$%\^&\*;:{}=\-_`~()]$/, ""));
+
+            const postData = {
+                uri: targetPostInfo.uri,
+                text: textContent,
+                hashtags: cleanHashtags,
+                createdAt: postRecord.createdAt || "",
+                hasMedia: false,
+                mediaType: null,
+                mediaUrls: [],
+                externalLink: null,
+                video: null
+            };
+
+            if (postRecord.embed) {
+                postData.hasMedia = true;
+                postData.mediaType = postRecord.embed.$type;
+
+                // Capturar múltiples imágenes si el embed es de tipo imágenes
+                if (postRecord.embed.images && postRecord.embed.images.length > 0) {
+                    postData.mediaUrls = postRecord.embed.images.map(img => {
+                        const ref = img.image?.ref?.toString() || img.image?.ref;
+                        if (ref) {
+                            return `https://cdn.bsky.social/img/feed_thumbnail/plain/${repoDid}/${ref}@jpeg`;
+                        }
+                        return img.fullsize || img.thumb;
+                    }).filter(Boolean);
+                } else if (post.embed?.images && post.embed.images.length > 0) {
+                    postData.mediaUrls = post.embed.images.map(img => img.fullsize || img.thumb).filter(Boolean);
+                }
+
+                if (postRecord.embed.$type === 'app.bsky.embed.external' && postRecord.embed.external) {
+                    postData.externalLink = {
+                        uri: postRecord.embed.external.uri,
+                        title: postRecord.embed.external.title,
+                        description: postRecord.embed.external.description,
+                        thumbUrl: post.embed?.external?.thumb?.ref ? `https://cdn.bsky.social/img/feed_thumbnail/plain/${repoDid}/${post.embed.external.thumb.ref.toString()}` : null
+                    };
+                }
+
+                if (postRecord.embed.$type === 'app.bsky.embed.video') {
+                    postData.video = {
+                        playlist: post.embed?.playlist || null,
+                        thumbnail: post.embed?.thumbnail || null,
+                        alt: postRecord.embed.alt || null,
+                        aspectRatio: postRecord.embed.aspectRatio || null,
+                    };
+                }
+            }
+
+            fs.writeFileSync(POST_JSON_FILE, JSON.stringify(postData, null, 2), 'utf-8');
+            console.log(`💾 Archivo post.json generado con éxito.`);
+
+            history.push({
+                rkey: targetPostInfo.rkey,
+                uri: targetPostInfo.uri,
+                createdAt: postRecord.createdAt || new Date().toISOString()
+            });
+            fs.writeFileSync(HISTORY_FILE, JSON.stringify(history, null, 2), 'utf-8');
+            console.log(`📝 history.json actualizado correctamente.`);
+
+            // --- DISPARAR EL SCRIPT 2 Y ESPERAR ---
+            console.log("🚀 Disparando script de publicación en Substack...");
+            try {
+                await runPublisher();
+                console.log("🏁 Publicación individual finalizada con éxito.");
+            } catch (pubError) {
+                console.error(`❌ Error al ejecutar el publicador para este post: ${pubError.message}`);
+            }
+
+            // Pausa de 2 minutos entre posts si hay más en la cola
+            if (i < pendingPosts.length - 1) {
+                console.log("⏳ Esperando 2 minutos antes de procesar el siguiente post...");
+                await sleep(120000); 
+            }
         }
 
-        const postRecord = post.record;
-
-        const textContent = postRecord.text || "";
-        const hashtagMatches = textContent.match(/#[^\s#]+/g) || [];
-        const cleanHashtags = hashtagMatches.map(tag => tag.replace(/[\.,\/#!$%\^&\*;:{}=\-_`~()]$/, ""));
-
-        const postData = {
-            uri: targetPostInfo.uri,
-            text: textContent,
-            hashtags: cleanHashtags,
-            createdAt: postRecord.createdAt || "",
-            hasMedia: false,
-            mediaType: null,
-            mediaUrls: [],
-            externalLink: null
-        };
-
-        if (postRecord.embed) {
-            postData.hasMedia = true;
-            postData.mediaType = postRecord.embed.$type;
-
-            if (postRecord.embed.images && postRecord.embed.images.length > 0) {
-                const images = post.embed?.images || [];
-                postData.mediaUrls = images.map(img => img.fullsize || img.thumb).filter(Boolean);
-            }
-
-            if (postRecord.embed.$type === 'app.bsky.embed.external' && postRecord.embed.external) {
-                postData.externalLink = {
-                    uri: postRecord.embed.external.uri,
-                    title: postRecord.embed.external.title,
-                    description: postRecord.embed.external.description,
-                    thumbUrl: post.embed?.external?.thumb?.ref ? `https://cdn.bsky.social/img/feed_thumbnail/plain/${repoDid}/${post.embed.external.thumb.ref.toString()}` : null
-                };
-            }
-
-            if (postRecord.embed.$type === 'app.bsky.embed.video') {
-                postData.video = {
-                    playlist: post.embed?.playlist || null,
-                    thumbnail: post.embed?.thumbnail || null,
-                    alt: postRecord.embed.alt || null,
-                    aspectRatio: postRecord.embed.aspectRatio || null,
-                };
-            }
-        }
-
-        fs.writeFileSync(POST_JSON_FILE, JSON.stringify(postData, null, 2), 'utf-8');
-        console.log(`💾 Archivo post.json generado con éxito.`);
-
-        history.push({
-            rkey: targetPostInfo.rkey,
-            uri: targetPostInfo.uri,
-            createdAt: postRecord.createdAt || new Date().toISOString()
-        });
-        fs.writeFileSync(HISTORY_FILE, JSON.stringify(history, null, 2), 'utf-8');
-        console.log(`📝 history.json actualizado correctamente.`);
-
-        // --- DISPARAR EL SCRIPT 2 (PUBLICADOR EN SUBS) ---
-        console.log("🚀 Disparando script de publicación en Substack...");
-        exec(`node "${SCRIPT_2_PATH}"`, (error, stdout, stderr) => {
-            if (error) {
-                console.error(`❌ Error al ejecutar el publicador: ${error.message}`);
-                return;
-            }
-            if (stderr) {
-                console.error(`⚠️ Avisos del publicador: ${stderr}`);
-            }
-            console.log(stdout);
-            console.log("🏁 Proceso completo finalizado.");
-        });
+        console.log("\n🎉 ¡Todos los posts pendientes han sido procesados en esta ejecución!");
 
     } catch (error) {
         console.error("❌ Error al extraer el post de Bluesky:", error);
