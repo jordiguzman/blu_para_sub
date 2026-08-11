@@ -187,6 +187,22 @@ const runPublisher = () => {
                 }
             }
 
+            // --- FILTRO DE VÍDEOS NATIVOS ---
+            if (postData.mediaType === 'app.bsky.embed.video') {
+                console.log("🎥 Detectado un vídeo nativo de Bluesky (formato m3u8). Omitiendo la publicación en Substack tal como solicitaste.");
+                
+                // Aun así lo registramos en el historial para marcarlo como leído y que no vuelva a procesarse
+                history.push({
+                    rkey: targetPostInfo.rkey,
+                    uri: targetPostInfo.uri,
+                    createdAt: postRecord.createdAt || new Date().toISOString()
+                });
+                fs.writeFileSync(HISTORY_FILE, JSON.stringify(history, null, 2), 'utf-8');
+                console.log(`📝 history.json actualizado (vídeo nativo omitido en Substack).`);
+                
+                continue; // Pasa directamente al siguiente post del bucle
+            }
+
             fs.writeFileSync(POST_JSON_FILE, JSON.stringify(postData, null, 2), 'utf-8');
             console.log(`💾 Archivo post.json generado con éxito.`);
 
