@@ -6,6 +6,7 @@ require('dotenv').config({ path: path.join(__dirname, 'config', '.env') });
 
 const HISTORY_FILE = path.join(__dirname, 'history.json');
 const POST_JSON_FILE = path.join(__dirname, 'post.json');
+const POSTS_ARCHIVE_FILE = path.join(__dirname, 'posts_archive.json');
 const SCRIPT_2_PATH = path.join(__dirname, '2_publicar_substack.js');
 
 // Función auxiliar para crear pausas (en milisegundos)
@@ -205,6 +206,19 @@ const runPublisher = () => {
 
             fs.writeFileSync(POST_JSON_FILE, JSON.stringify(postData, null, 2), 'utf-8');
             console.log(`💾 Archivo post.json generado con éxito.`);
+
+            // --- ARCHIVO DE ACUMULACIÓN NUEVO ---
+            try {
+                let archiveList = [];
+                if (fs.existsSync(POSTS_ARCHIVE_FILE)) {
+                    archiveList = JSON.parse(fs.readFileSync(POSTS_ARCHIVE_FILE, 'utf-8'));
+                }
+                archiveList.push(postData);
+                fs.writeFileSync(POSTS_ARCHIVE_FILE, JSON.stringify(archiveList, null, 2), 'utf-8');
+                console.log(`📦 posts_archive.json actualizado con el nuevo post.`);
+            } catch (archiveErr) {
+                console.error(`⚠️ No se pudo actualizar posts_archive.json: ${archiveErr.message}`);
+            }
 
             history.push({
                 rkey: targetPostInfo.rkey,
