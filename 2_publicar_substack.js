@@ -6,21 +6,55 @@ const fs = require('fs');
 const https = require('https');
 require('dotenv').config({ path: path.join(__dirname, 'config', '.env') });
 
-// Descarga una URL a un archivo local, devuelve una Promise
+// Función mejorada para descargar imágenes siguiendo redirecciones (302/301), con User-Agent y validación
 function descargarImagen(url, destino) {
     return new Promise((resolve, reject) => {
-        const file = fs.createWriteStream(destino);
-        https.get(url, (response) => {
-            if (response.statusCode !== 200) {
-                reject(new Error(`Descarga falló con status ${response.statusCode}`));
-                return;
-            }
-            response.pipe(file);
-            file.on('finish', () => file.close(resolve));
-        }).on('error', (err) => {
-            fs.unlink(destino, () => {});
-            reject(err);
-        });
+        const opciones = {
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+        };
+
+        const hacerPeticion = (urlActual) => {
+            https.get(urlActual, opciones, (response) => {
+                // Manejar redirecciones automáticamente (301 y 302)
+                if (response.statusCode === 301 || response.statusCode === 302) {
+                    if (response.headers.location) {
+                        return hacerPeticion(response.headers.location);
+                    } else {
+                        reject(new Error(`Redirección sin cabecera 'location' (status ${response.statusCode})`));
+                        return;
+                    }
+                }
+
+                if (response.statusCode !== 200) {
+                    reject(new Error(`Descarga falló con status ${response.statusCode}`));
+                    return;
+                }
+
+                const file = fs.createWriteStream(destino);
+                response.pipe(file);
+                
+                file.on('finish', () => {
+                    file.close(() => {
+                        try {
+                            const stats = fs.statSync(destino);
+                            if (stats.size === 0) {
+                                fs.unlink(destino, () => {});
+                                reject(new Error("El archivo descargado está vacío (0 bytes)."));
+                                return;
+                            }
+                            resolve();
+                        } catch (err) {
+                            reject(err);
+                        }
+                    });
+                });
+            }).on('error', (err) => {
+                fs.unlink(destino, () => {});
+                reject(err);
+            });
+        };
+
+        hacerPeticion(url);
     });
 }
 
@@ -100,6 +134,10 @@ function descargarImagen(url, destino) {
                 fs.mkdirSync(tempDir, { recursive: true });
             }
 
+            // Pausa inicial para dar tiempo al CDN de Bluesky a procesar la imagen
+            console.log("⏳ Esperando a que el CDN procese la imagen...");
+            await new Promise(resolve => setTimeout(resolve, 5000));
+
             const localImagePaths = [];
 
             // 1. Descargamos todas las imágenes del array
@@ -139,12 +177,11 @@ function descargarImagen(url, destino) {
                     const fileInputHandles = await page.$$('input[type="file"]');
                     const targetInput = fileInputHandles[chosenIndex];
 
-                    // Subimos TODAS las rutas de golpe al input (Puppeteer permite pasar arrays de ficheros)
+                    // Subimos TODAS las rutas de golpe al input
                     await targetInput.uploadFile(...localImagePaths);
                     console.log(`📤 ${localImagePaths.length} archivos entregados al input simultáneamente.`);
 
                     console.log("⏳ Esperando a que Substack procese y suba las imágenes...");
-                    // Damos un margen generoso para que carguen las 3 fotos
                     await new Promise(r => setTimeout(r, 8000));
                 }
             }
@@ -169,7 +206,7 @@ function descargarImagen(url, destino) {
         });
 
         if (!postButtonInfo.found || postButtonInfo.disabled) {
-            console.log("⚠️ El botón 'Post' no está disponible o sigue deshabilitado (las imágenes pueden seguir procesándose).");
+            console.log("⚠️ El botón 'Post' não está disponible o sigue deshabilitado (las imágenes pueden seguir procesándose).");
             console.log("🛑 Dejando el navegador abierto 10 segundos para revisar.");
             await new Promise(r => setTimeout(r, 10000));
             await browser.close();
