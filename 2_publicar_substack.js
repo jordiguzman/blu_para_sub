@@ -15,7 +15,6 @@ function descargarImagen(url, destino) {
 
         const hacerPeticion = (urlActual) => {
             https.get(urlActual, opciones, (response) => {
-                // Manejar redirecciones automáticamente (301 y 302)
                 if (response.statusCode === 301 || response.statusCode === 302) {
                     if (response.headers.location) {
                         return hacerPeticion(response.headers.location);
@@ -109,43 +108,44 @@ function descargarImagen(url, destino) {
         }
         const postData = JSON.parse(fs.readFileSync(jsonPath, 'utf-8'));
 
-        const esEnlaceExterno = postData.mediaType === 'app.bsky.embed.external';
-        const textoCompleto = esEnlaceExterno
-            ? postData.text.replace(/https?:\/\/[^\s]+/g, '').trim()
-            : postData.text.trim();
+        // --- LÓGICA DE PRIORIZACIÓN DE IMÁGENES VS CARDS ---
+        const tieneImagenes = postData.hasMedia && postData.mediaUrls && postData.mediaUrls.length > 0;
+        
+        let textoFinal = postData.text.trim();
+        let enlaceParaAlFinal = null;
 
-        console.log("📝 Texto a escribir:\n", textoCompleto);
-        await page.keyboard.type(textoCompleto, { delay: 40 });
-        await new Promise(r => setTimeout(r, 2000));
-
-        // --- ENLACE EXTERNO ---
-        if (postData.mediaType === 'app.bsky.embed.external' && postData.externalLink && postData.externalLink.uri) {
-            console.log(`🔗 Añadiendo enlace externo: ${postData.externalLink.uri}`);
-            await page.keyboard.type('\n\n' + postData.externalLink.uri, { delay: 40 });
-
-            console.log("⏳ Esperando a que el editor genere la tarjeta de vista previa...");
-            await new Promise(r => setTimeout(r, 4000));
+        if (tieneImagenes && postData.mediaType === 'app.bsky.embed.external' && postData.externalLink && postData.externalLink.uri) {
+            enlaceParaAlFinal = postData.externalLink.uri;
+            // Quitamos la URL del texto inicial para que el editor no cree el card automático encima de la foto
+            textoFinal = textoFinal.replace(enlaceParaAlFinal, '').trim();
         }
 
-        // --- MÚLTIPLES IMÁGENES: Descargar y subir el array completo ---
-        if (postData.hasMedia && postData.mediaUrls && postData.mediaUrls.length > 0) {
+        console.log("📝 Escribiendo texto en el editor...");
+        await page.keyboard.type(textoFinal, { delay: 40 });
+        await new Promise(r => setTimeout(r, 2000));
+
+        // --- MÚLTIPLES IMÁGENES: Descargar y subir el array completo ANTES que el enlace ---
+        if (tieneImagenes) {
             const tempDir = path.join(__dirname, 'temp_media');
             if (!fs.existsSync(tempDir)) {
                 fs.mkdirSync(tempDir, { recursive: true });
             }
 
-            // Pausa inicial para dar tiempo al CDN de Bluesky a procesar la imagen
             console.log("⏳ Esperando a que el CDN procese la imagen...");
             await new Promise(resolve => setTimeout(resolve, 5000));
 
             const localImagePaths = [];
 
-            // 1. Descargamos todas las imágenes del array
             for (let i = 0; i < postData.mediaUrls.length; i++) {
-                const imageUrl = postData.mediaUrls[i];
+                let imageUrl = postData.mediaUrls[i];
+                
+                if (imageUrl.includes('feed_thumbnail')) {
+                    imageUrl = imageUrl.replace('feed_thumbnail', 'feed_fullsize');
+                }
+
                 const imagePath = path.join(tempDir, `imagen_temp_${i + 1}.jpg`);
                 
-                console.log(`⬇️ [${i + 1}/${postData.mediaUrls.length}] Descargando imagen...`);
+                console.log(`⬇️ [${i + 1}/${postData.mediaUrls.length}] Descargando imagen: ${imageUrl}`);
                 try {
                     await descargarImagen(imageUrl, imagePath);
                     localImagePaths.push(imagePath);
@@ -155,35 +155,38 @@ function descargarImagen(url, destino) {
                 }
             }
 
-            if (localImagePaths.length > 0) {
+            if (localImagePaths.length === 0) {
                 console.log("🔍 Buscando el input de subida de archivo dentro del editor...");
-                
-                const inputsInfo = await page.evaluate(() => {
-                    const inputs = Array.from(document.querySelectorAll('input[type="file"]'));
-                    return inputs.map((el, i) => ({
-                        index: i,
-                        accept: el.getAttribute('accept'),
-                        visible: el.offsetParent !== null,
-                    }));
-                });
+                console.error("❌ ERROR CRÍTICO: El post debía tener imágenes pero ninguna se pudo descargar. Abortando publicación para evitar publicar sin fotos.");
+                await browser.close();
+                return;
+            }
 
-                if (inputsInfo.length === 0) {
-                    console.log("⚠️ No se encontró ningún input de tipo file en la página.");
-                } else {
-                    const targetIndex = inputsInfo.findIndex(i => i.accept && i.accept.includes('image'));
-                    const chosenIndex = targetIndex !== -1 ? targetIndex : 0;
-                    console.log(`🎯 Usando el input número ${chosenIndex}`);
+            console.log("🔍 Buscando el input de subida de archivo dentro del editor...");
+            const inputsInfo = await page.evaluate(() => {
+                const inputs = Array.from(document.querySelectorAll('input[type="file"]'));
+                return inputs.map((el, i) => ({
+                    index: i,
+                    accept: el.getAttribute('accept'),
+                    visible: el.offsetParent !== null,
+                }));
+            });
 
-                    const fileInputHandles = await page.$$('input[type="file"]');
-                    const targetInput = fileInputHandles[chosenIndex];
+            if (inputsInfo.length === 0) {
+                console.log("⚠️ No se encontró ningún input de tipo file en la página.");
+            } else {
+                const targetIndex = inputsInfo.findIndex(i => i.accept && i.accept.includes('image'));
+                const chosenIndex = targetIndex !== -1 ? targetIndex : 0;
+                console.log(`🎯 Usando el input número ${chosenIndex}`);
 
-                    // Subimos TODAS las rutas de golpe al input
-                    await targetInput.uploadFile(...localImagePaths);
-                    console.log(`📤 ${localImagePaths.length} archivos entregados al input simultáneamente.`);
+                const fileInputHandles = await page.$$('input[type="file"]');
+                const targetInput = fileInputHandles[chosenIndex];
 
-                    console.log("⏳ Esperando a que Substack procese y suba las imágenes...");
-                    await new Promise(r => setTimeout(r, 8000));
-                }
+                await targetInput.uploadFile(...localImagePaths);
+                console.log(`📤 ${localImagePaths.length} archivos entregados al input simultáneamente.`);
+
+                console.log("⏳ Esperando a que Substack procese y suba las imágenes en grande...");
+                await new Promise(r => setTimeout(r, 8000));
             }
 
             const screenshotPath = path.join(__dirname, 'debug_imagenes_subidas.png');
@@ -191,6 +194,19 @@ function descargarImagen(url, destino) {
             console.log(`📸 Captura guardada en: ${screenshotPath}`);
         } else {
             console.log("ℹ️ Este post no tiene imágenes adjuntas.");
+        }
+
+        // --- ENLACE EXTERNO ---
+        // Si había imágenes y un enlace, lo añadimos al final para que no interfiera con la foto
+        if (enlaceParaAlFinal) {
+            console.log(`🔗 Añadiendo enlace externo al final: ${enlaceParaAlFinal}`);
+            await page.keyboard.type('\n\n' + enlaceParaAlFinal, { delay: 40 });
+            await new Promise(r => setTimeout(r, 4000));
+        } else if (!tieneImagenes && postData.mediaType === 'app.bsky.embed.external' && postData.externalLink && postData.externalLink.uri) {
+            // Caso Bandcamp (sin imágenes): comportamiento original con su tarjeta intacta
+            console.log(`🔗 Añadiendo enlace externo (Bandcamp): ${postData.externalLink.uri}`);
+            await page.keyboard.type('\n\n' + postData.externalLink.uri, { delay: 40 });
+            await new Promise(r => setTimeout(r, 4000));
         }
 
         console.log("🔍 Buscando el botón 'Post'...");
@@ -206,7 +222,7 @@ function descargarImagen(url, destino) {
         });
 
         if (!postButtonInfo.found || postButtonInfo.disabled) {
-            console.log("⚠️ El botón 'Post' não está disponible o sigue deshabilitado (las imágenes pueden seguir procesándose).");
+            console.log("⚠️ El botón 'Post' no está disponible o sigue deshabilitado (las imágenes pueden seguir procesándose).");
             console.log("🛑 Dejando el navegador abierto 10 segundos para revisar.");
             await new Promise(r => setTimeout(r, 10000));
             await browser.close();

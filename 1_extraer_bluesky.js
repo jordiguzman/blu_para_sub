@@ -8,6 +8,7 @@ const HISTORY_FILE = path.join(__dirname, 'history.json');
 const POST_JSON_FILE = path.join(__dirname, 'post.json');
 const POSTS_ARCHIVE_FILE = path.join(__dirname, 'posts_archive.json');
 const SCRIPT_2_PATH = path.join(__dirname, '2_publicar_substack.js');
+const TEMP_MEDIA_DIR = path.join(__dirname, 'temp_media');
 
 // Función auxiliar para crear pausas (en milisegundos)
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -156,17 +157,49 @@ const runPublisher = () => {
                 postData.hasMedia = true;
                 postData.mediaType = postRecord.embed.$type;
 
-                // Capturar múltiples imágenes si el embed es de tipo imágenes
+                let remoteImageUrls = [];
+
+                // Capturar URLs remotas originales
                 if (postRecord.embed.images && postRecord.embed.images.length > 0) {
-                    postData.mediaUrls = postRecord.embed.images.map(img => {
+                    remoteImageUrls = postRecord.embed.images.map(img => {
                         const ref = img.image?.ref?.toString() || img.image?.ref;
                         if (ref) {
-                            return `https://cdn.bsky.social/img/feed_thumbnail/plain/${repoDid}/${ref}@jpeg`;
+                            return `https://cdn.bsky.social/img/feed_fullsize/plain/${repoDid}/${ref}@jpeg`;
                         }
                         return img.fullsize || img.thumb;
                     }).filter(Boolean);
                 } else if (post.embed?.images && post.embed.images.length > 0) {
-                    postData.mediaUrls = post.embed.images.map(img => img.fullsize || img.thumb).filter(Boolean);
+                    remoteImageUrls = post.embed.images.map(img => img.fullsize || img.thumb).filter(Boolean);
+                }
+
+                // Descargar las imágenes localmente para evitar fallos del CDN en Substack
+                if (remoteImageUrls.length > 0) {
+                    if (!fs.existsSync(TEMP_MEDIA_DIR)) {
+                        fs.mkdirSync(TEMP_MEDIA_DIR, { recursive: true });
+                    }
+
+                    const localImagePaths = [];
+                    for (let imgIdx = 0; imgIdx < remoteImageUrls.length; imgIdx++) {
+                        const imgUrl = remoteImageUrls[imgIdx];
+                        try {
+                            console.log(`📥 Descargando imagen localmente: ${imgUrl}`);
+                            const imgRes = await fetch(imgUrl);
+                            if (imgRes.ok) {
+                                const buffer = Buffer.from(await imgRes.arrayBuffer());
+                                const localFileName = `bsky_${targetPostInfo.rkey}_${imgIdx}.jpg`;
+                                const localFilePath = path.join(TEMP_MEDIA_DIR, localFileName);
+                                
+                                fs.writeFileSync(localFilePath, buffer);
+                                localImagePaths.push(localFilePath);
+                                console.log(`✅ Imagen guardada en disco: ${localFilePath}`);
+                            } else {
+                                console.error(`⚠️ Error al descargar imagen (Status: ${imgRes.status})`);
+                            }
+                        } catch (imgErr) {
+                            console.error(`⚠️ Excepción descargando imagen: ${imgErr.message}`);
+                        }
+                    }
+                    postData.mediaUrls = localImagePaths;
                 }
 
                 if (postRecord.embed.$type === 'app.bsky.embed.external' && postRecord.embed.external) {
@@ -192,7 +225,6 @@ const runPublisher = () => {
             if (postData.mediaType === 'app.bsky.embed.video') {
                 console.log("🎥 Detectado un vídeo nativo de Bluesky (formato m3u8). Omitiendo la publicación en Substack tal como solicitaste.");
                 
-                // Aun así lo registramos en el historial para marcarlo como leído y que no vuelva a procesarse
                 history.push({
                     rkey: targetPostInfo.rkey,
                     uri: targetPostInfo.uri,
@@ -201,7 +233,7 @@ const runPublisher = () => {
                 fs.writeFileSync(HISTORY_FILE, JSON.stringify(history, null, 2), 'utf-8');
                 console.log(`📝 history.json actualizado (vídeo nativo omitido en Substack).`);
                 
-                continue; // Pasa directamente al siguiente post del bucle
+                continue;
             }
 
             fs.writeFileSync(POST_JSON_FILE, JSON.stringify(postData, null, 2), 'utf-8');
