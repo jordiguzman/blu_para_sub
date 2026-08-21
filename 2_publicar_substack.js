@@ -3,59 +3,7 @@ const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 puppeteer.use(StealthPlugin());
 const path = require('path');
 const fs = require('fs');
-const https = require('https');
 require('dotenv').config({ path: path.join(__dirname, 'config', '.env') });
-
-// Función mejorada para descargar imágenes siguiendo redirecciones (302/301), con User-Agent y validación
-function descargarImagen(url, destino) {
-    return new Promise((resolve, reject) => {
-        const opciones = {
-            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
-        };
-
-        const hacerPeticion = (urlActual) => {
-            https.get(urlActual, opciones, (response) => {
-                if (response.statusCode === 301 || response.statusCode === 302) {
-                    if (response.headers.location) {
-                        return hacerPeticion(response.headers.location);
-                    } else {
-                        reject(new Error(`Redirección sin cabecera 'location' (status ${response.statusCode})`));
-                        return;
-                    }
-                }
-
-                if (response.statusCode !== 200) {
-                    reject(new Error(`Descarga falló con status ${response.statusCode}`));
-                    return;
-                }
-
-                const file = fs.createWriteStream(destino);
-                response.pipe(file);
-                
-                file.on('finish', () => {
-                    file.close(() => {
-                        try {
-                            const stats = fs.statSync(destino);
-                            if (stats.size === 0) {
-                                fs.unlink(destino, () => {});
-                                reject(new Error("El archivo descargado está vacío (0 bytes)."));
-                                return;
-                            }
-                            resolve();
-                        } catch (err) {
-                            reject(err);
-                        }
-                    });
-                });
-            }).on('error', (err) => {
-                fs.unlink(destino, () => {});
-                reject(err);
-            });
-        };
-
-        hacerPeticion(url);
-    });
-}
 
 (async () => {
     console.log("🚀 [PUBLICADOR] Iniciando navegador...");
@@ -116,7 +64,6 @@ function descargarImagen(url, destino) {
 
         if (tieneImagenes && postData.mediaType === 'app.bsky.embed.external' && postData.externalLink && postData.externalLink.uri) {
             enlaceParaAlFinal = postData.externalLink.uri;
-            // Quitamos la URL del texto inicial para que el editor no cree el card automático encima de la foto
             textoFinal = textoFinal.replace(enlaceParaAlFinal, '').trim();
         }
 
@@ -124,43 +71,17 @@ function descargarImagen(url, destino) {
         await page.keyboard.type(textoFinal, { delay: 40 });
         await new Promise(r => setTimeout(r, 2000));
 
-        // --- MÚLTIPLES IMÁGENES: Descargar y subir el array completo ANTES que el enlace ---
+        // --- GESTIÓN DE IMÁGENES LOCALES YA DESCARGADAS ---
         if (tieneImagenes) {
-            const tempDir = path.join(__dirname, 'temp_media');
-            if (!fs.existsSync(tempDir)) {
-                fs.mkdirSync(tempDir, { recursive: true });
-            }
-
-            console.log("⏳ Esperando a que el CDN procese la imagen...");
-            await new Promise(resolve => setTimeout(resolve, 5000));
-
-            const localImagePaths = [];
-
-            for (let i = 0; i < postData.mediaUrls.length; i++) {
-                let imageUrl = postData.mediaUrls[i];
-                
-                if (imageUrl.includes('feed_thumbnail')) {
-                    imageUrl = imageUrl.replace('feed_thumbnail', 'feed_fullsize');
-                }
-
-                const imagePath = path.join(tempDir, `imagen_temp_${i + 1}.jpg`);
-                
-                console.log(`⬇️ [${i + 1}/${postData.mediaUrls.length}] Descargando imagen: ${imageUrl}`);
-                try {
-                    await descargarImagen(imageUrl, imagePath);
-                    localImagePaths.push(imagePath);
-                    console.log(`✅ Guardada en: ${imagePath}`);
-                } catch (imgErr) {
-                    console.error(`❌ Error descargando la imagen ${i + 1}: ${imgErr.message}`);
-                }
-            }
+            const localImagePaths = postData.mediaUrls.filter(filePath => fs.existsSync(filePath));
 
             if (localImagePaths.length === 0) {
-                console.log("🔍 Buscando el input de subida de archivo dentro del editor...");
-                console.error("❌ ERROR CRÍTICO: El post debía tener imágenes pero ninguna se pudo descargar. Abortando publicación para evitar publicar sin fotos.");
+                console.error("❌ ERROR CRÍTICO: El post debía tener imágenes pero no se encuentran los ficheros locales en el servidor.");
                 await browser.close();
                 return;
             }
+
+            console.log(`📁 Usando ${localImagePaths.length} imágenes preparadas localmente.`);
 
             console.log("🔍 Buscando el input de subida de archivo dentro del editor...");
             const inputsInfo = await page.evaluate(() => {
@@ -185,7 +106,7 @@ function descargarImagen(url, destino) {
                 await targetInput.uploadFile(...localImagePaths);
                 console.log(`📤 ${localImagePaths.length} archivos entregados al input simultáneamente.`);
 
-                console.log("⏳ Esperando a que Substack procese y suba las imágenes en grande...");
+                console.log("⏳ Esperando a que Substack procese y suba las imágenes...");
                 await new Promise(r => setTimeout(r, 8000));
             }
 
@@ -197,13 +118,11 @@ function descargarImagen(url, destino) {
         }
 
         // --- ENLACE EXTERNO ---
-        // Si había imágenes y un enlace, lo añadimos al final para que no interfiera con la foto
         if (enlaceParaAlFinal) {
             console.log(`🔗 Añadiendo enlace externo al final: ${enlaceParaAlFinal}`);
             await page.keyboard.type('\n\n' + enlaceParaAlFinal, { delay: 40 });
             await new Promise(r => setTimeout(r, 4000));
         } else if (!tieneImagenes && postData.mediaType === 'app.bsky.embed.external' && postData.externalLink && postData.externalLink.uri) {
-            // Caso Bandcamp (sin imágenes): comportamiento original con su tarjeta intacta
             console.log(`🔗 Añadiendo enlace externo (Bandcamp): ${postData.externalLink.uri}`);
             await page.keyboard.type('\n\n' + postData.externalLink.uri, { delay: 40 });
             await new Promise(r => setTimeout(r, 4000));

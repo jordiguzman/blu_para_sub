@@ -1,11 +1,15 @@
 {
-  "uri": "test_manual_123",
-  "text": "Prueba de subida de imagen desde el servidor (Test Suite)",
+  "uri": "at://did:plc:7rxajtbhdi4fpelalnmu35it/app.bsky.feed.post/3mtmft2dac62f",
+  "text": "Test post con arte",
   "hashtags": [],
-  "createdAt": "2026-08-18T00:00:00Z",
+  "createdAt": "2026-08-21T18:38:40.400Z",
   "hasMedia": true,
   "mediaType": "app.bsky.embed.images",
-  "mediaUrls": ["https://picsum.photos/800/600"],
+  "mediaUrls": [
+    "D:\\PHP\\Scripts en Hosting\\blu_para_sub\\temp_media\\bsky_3mtmft2dac62f_0.jpg",
+    "D:\\PHP\\Scripts en Hosting\\blu_para_sub\\temp_media\\bsky_3mtmft2dac62f_1.jpg",
+    "D:\\PHP\\Scripts en Hosting\\blu_para_sub\\temp_media\\bsky_3mtmft2dac62f_2.jpg"
+  ],
   "externalLink": null,
   "video": null
 }

@@ -6,7 +6,6 @@ require('dotenv').config({ path: path.join(__dirname, 'config', '.env') });
 
 const HISTORY_FILE = path.join(__dirname, 'history.json');
 const POST_JSON_FILE = path.join(__dirname, 'post.json');
-const POSTS_ARCHIVE_FILE = path.join(__dirname, 'posts_archive.json');
 const SCRIPT_2_PATH = path.join(__dirname, '2_publicar_substack.js');
 const TEMP_MEDIA_DIR = path.join(__dirname, 'temp_media');
 
@@ -157,46 +156,57 @@ const runPublisher = () => {
                 postData.hasMedia = true;
                 postData.mediaType = postRecord.embed.$type;
 
-                let remoteImageUrls = [];
+                let imageBlobs = [];
 
-                // Capturar URLs remotas originales
                 if (postRecord.embed.images && postRecord.embed.images.length > 0) {
-                    remoteImageUrls = postRecord.embed.images.map(img => {
-                        const ref = img.image?.ref?.toString() || img.image?.ref;
-                        if (ref) {
-                            return `https://cdn.bsky.social/img/feed_fullsize/plain/${repoDid}/${ref}@jpeg`;
-                        }
-                        return img.fullsize || img.thumb;
+                    imageBlobs = postRecord.embed.images.map(img => {
+                        return img.image?.ref?.toString() || img.image?.ref;
                     }).filter(Boolean);
-                } else if (post.embed?.images && post.embed.images.length > 0) {
-                    remoteImageUrls = post.embed.images.map(img => img.fullsize || img.thumb).filter(Boolean);
                 }
 
-                // Descargar las imágenes localmente para evitar fallos del CDN en Substack
-                if (remoteImageUrls.length > 0) {
+                // Descargar imágenes directamente desde el PDS usando getBlob (sin pasar por CDNs públicos)
+                if (imageBlobs.length > 0) {
                     if (!fs.existsSync(TEMP_MEDIA_DIR)) {
                         fs.mkdirSync(TEMP_MEDIA_DIR, { recursive: true });
                     }
 
                     const localImagePaths = [];
-                    for (let imgIdx = 0; imgIdx < remoteImageUrls.length; imgIdx++) {
-                        const imgUrl = remoteImageUrls[imgIdx];
-                        try {
-                            console.log(`📥 Descargando imagen localmente: ${imgUrl}`);
-                            const imgRes = await fetch(imgUrl);
-                            if (imgRes.ok) {
-                                const buffer = Buffer.from(await imgRes.arrayBuffer());
-                                const localFileName = `bsky_${targetPostInfo.rkey}_${imgIdx}.jpg`;
-                                const localFilePath = path.join(TEMP_MEDIA_DIR, localFileName);
-                                
-                                fs.writeFileSync(localFilePath, buffer);
-                                localImagePaths.push(localFilePath);
-                                console.log(`✅ Imagen guardada en disco: ${localFilePath}`);
-                            } else {
-                                console.error(`⚠️ Error al descargar imagen (Status: ${imgRes.status})`);
+                    for (let imgIdx = 0; imgIdx < imageBlobs.length; imgIdx++) {
+                        const blobCid = imageBlobs[imgIdx];
+                        let descargadoExitosamente = false;
+                        let intentos = 0;
+                        const maxIntentos = 3;
+
+                        while (!descargadoExitosamente && intentos < maxIntentos) {
+                            intentos++;
+                            try {
+                                console.log(`📥 [Intento ${intentos}/${maxIntentos}] Descargando blob desde PDS (CID: ${blobCid})...`);
+                                const blobRes = await agent.com.atproto.sync.getBlob({
+                                    did: repoDid,
+                                    cid: blobCid
+                                });
+
+                                if (blobRes && blobRes.data) {
+                                    const buffer = Buffer.from(blobRes.data);
+                                    const localFileName = `bsky_${targetPostInfo.rkey}_${imgIdx}.jpg`;
+                                    const localFilePath = path.join(TEMP_MEDIA_DIR, localFileName);
+                                    
+                                    fs.writeFileSync(localFilePath, buffer);
+                                    localImagePaths.push(localFilePath);
+                                    console.log(`✅ Imagen guardada en disco: ${localFilePath}`);
+                                    descargadoExitosamente = true;
+                                } else {
+                                    console.warn(`⚠️ Intento ${intentos} fallido. Reintentando en 3 segundos...`);
+                                    if (intentos < maxIntentos) await sleep(3000);
+                                }
+                            } catch (imgErr) {
+                                console.warn(`⚠️ Excepción en intento ${intentos}: ${imgErr.message}. Reintentando en 3 segundos...`);
+                                if (intentos < maxIntentos) await sleep(3000);
                             }
-                        } catch (imgErr) {
-                            console.error(`⚠️ Excepción descargando imagen: ${imgErr.message}`);
+                        }
+
+                        if (!descargadoExitosamente) {
+                            console.error(`❌ No se pudo descargar el blob ${imgIdx + 1} tras ${maxIntentos} intentos.`);
                         }
                     }
                     postData.mediaUrls = localImagePaths;
@@ -238,19 +248,6 @@ const runPublisher = () => {
 
             fs.writeFileSync(POST_JSON_FILE, JSON.stringify(postData, null, 2), 'utf-8');
             console.log(`💾 Archivo post.json generado con éxito.`);
-
-            // --- ARCHIVO DE ACUMULACIÓN NUEVO ---
-            try {
-                let archiveList = [];
-                if (fs.existsSync(POSTS_ARCHIVE_FILE)) {
-                    archiveList = JSON.parse(fs.readFileSync(POSTS_ARCHIVE_FILE, 'utf-8'));
-                }
-                archiveList.push(postData);
-                fs.writeFileSync(POSTS_ARCHIVE_FILE, JSON.stringify(archiveList, null, 2), 'utf-8');
-                console.log(`📦 posts_archive.json actualizado con el nuevo post.`);
-            } catch (archiveErr) {
-                console.error(`⚠️ No se pudo actualizar posts_archive.json: ${archiveErr.message}`);
-            }
 
             history.push({
                 rkey: targetPostInfo.rkey,
