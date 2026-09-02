@@ -1,18 +1,15 @@
 {
-  "uri": "at://did:plc:7rxajtbhdi4fpelalnmu35it/app.bsky.feed.post/3mujv5dtcu72h",
-  "text": "Ambient Selection:\n\nCome Rain Come Shine\nby Drift Ritual\n\n#music #ambient",
-  "hashtags": [
-    "#music",
-    "#ambient"
-  ],
-  "createdAt": "2026-09-02T12:00:04Z",
+  "uri": "at://did:plc:7rxajtbhdi4fpelalnmu35it/app.bsky.feed.post/3mukrswafzs2c",
+  "text": "Test post con enlace",
+  "hashtags": [],
+  "createdAt": "2026-09-02T20:33:13.516Z",
   "hasMedia": true,
   "mediaType": "app.bsky.embed.external",
   "mediaUrls": [],
   "externalLink": {
-    "uri": "https://driftritual.bandcamp.com/album/come-rain-come-shine",
-    "title": "Come Rain Come Shine",
-    "description": "11 track album",
+    "uri": "https://mentat1.bandcamp.com/track/mars",
+    "title": "Mars, by Mentat",
+    "description": "from the album Solar System",
     "thumbUrl": null
   },
   "video": null

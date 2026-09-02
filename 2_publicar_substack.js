@@ -67,9 +67,16 @@ require('dotenv').config({ path: path.join(__dirname, 'config', '.env') });
             textoFinal = textoFinal.replace(enlaceParaAlFinal, '').trim();
         }
 
-        console.log("📝 Escribiendo texto en el editor...");
+        // --- INICIO DE MODIFICACIÓN: OPCIÓN 1 (Foco estricto y tecleo robusto) ---
+        console.log("📝 Asegurando foco y escribiendo texto en el editor...");
+        const editorHandle = await page.$('div.inlineComposer-v8PLSi [contenteditable="true"]');
+        if (editorHandle) {
+            await editorHandle.click();
+        }
+        await new Promise(r => setTimeout(r, 1000)); // Pausa de estabilización del foco
         await page.keyboard.type(textoFinal, { delay: 40 });
         await new Promise(r => setTimeout(r, 2000));
+        // --- FIN DE MODIFICACIÓN: OPCIÓN 1 ---
 
         // --- GESTIÓN DE IMÁGENES LOCALES YA DESCARGADAS ---
         if (tieneImagenes) {
