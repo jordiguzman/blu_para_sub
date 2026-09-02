@@ -67,9 +67,29 @@ require('dotenv').config({ path: path.join(__dirname, 'config', '.env') });
             textoFinal = textoFinal.replace(enlaceParaAlFinal, '').trim();
         }
 
-        console.log("📝 Escribiendo texto en el editor...");
-        await page.keyboard.type(textoFinal, { delay: 40 });
-        await new Promise(r => setTimeout(r, 2000));
+        console.log("📝 Escribiendo texto en el editor de forma limpia...");
+// Hacemos clic asegurando el foco
+await page.click(composerSelector);
+await new Promise(r => setTimeout(r, 500));
+
+// Inyectamos el texto completo de golpe simulando pegado o asignación de valor al elemento activo,
+// evitando por completo el desfase de pulsaciones de teclado que se come las primeras letras.
+await page.evaluate((texto) => {
+    const activeEl = document.activeElement;
+    if (activeEl) {
+        // Si es un div editable (contenteditable) de Substack
+        if (activeEl.isContentEditable) {
+            activeEl.textContent = texto;
+        } else if (activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'INPUT') {
+            activeEl.value = texto;
+        }
+        // Disparamos eventos de input para que Substack detecte el cambio de estado y active el botón Post
+        activeEl.dispatchEvent(new Event('input', { bubbles: true }));
+        activeEl.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+}, textoFinal);
+
+await new Promise(r => setTimeout(r, 1500));
 
         // --- GESTIÓN DE IMÁGENES LOCALES YA DESCARGADAS ---
         if (tieneImagenes) {

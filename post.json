@@ -1,15 +1,16 @@
 {
-  "uri": "at://did:plc:7rxajtbhdi4fpelalnmu35it/app.bsky.feed.post/3mtmft2dac62f",
-  "text": "Test post con arte",
+  "uri": "at://did:plc:7rxajtbhdi4fpelalnmu35it/app.bsky.feed.post/3muijlvr26s2x",
+  "text": "Test image BandCamp",
   "hashtags": [],
-  "createdAt": "2026-08-21T18:38:40.400Z",
+  "createdAt": "2026-09-01T23:00:48.720Z",
   "hasMedia": true,
-  "mediaType": "app.bsky.embed.images",
-  "mediaUrls": [
-    "D:\\PHP\\Scripts en Hosting\\blu_para_sub\\temp_media\\bsky_3mtmft2dac62f_0.jpg",
-    "D:\\PHP\\Scripts en Hosting\\blu_para_sub\\temp_media\\bsky_3mtmft2dac62f_1.jpg",
-    "D:\\PHP\\Scripts en Hosting\\blu_para_sub\\temp_media\\bsky_3mtmft2dac62f_2.jpg"
-  ],
-  "externalLink": null,
+  "mediaType": "app.bsky.embed.external",
+  "mediaUrls": [],
+  "externalLink": {
+    "uri": "https://mentat1.bandcamp.com/track/at-patriarchs-ponds",
+    "title": "At Patriarch's Ponds, by Mentat",
+    "description": "from the album Pleased To Meet You",
+    "thumbUrl": null
+  },
   "video": null
 }
