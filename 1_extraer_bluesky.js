@@ -6,9 +6,7 @@ require('dotenv').config({ path: path.join(__dirname, 'config', '.env') });
 
 const HISTORY_FILE = path.join(__dirname, 'history.json');
 const POST_JSON_FILE = path.join(__dirname, 'post.json');
-const THREAD_JSON_FILE = path.join(__dirname, 'thread.json');
 const SCRIPT_2_PATH = path.join(__dirname, '2_publicar_substack.js');
-const SCRIPT_3_PATH = path.join(__dirname, '3_publicar_hilo.js');
 const TEMP_MEDIA_DIR = path.join(__dirname, 'temp_media');
 
 // Función auxiliar para crear pausas (en milisegundos)
@@ -28,167 +26,6 @@ const runPublisher = () => {
             resolve();
         });
     });
-};
-
-// Función auxiliar para ejecutar el script 3 usando Promesas
-const runThreadPublisher = () => {
-    return new Promise((resolve, reject) => {
-        exec(`node "${SCRIPT_3_PATH}"`, (error, stdout, stderr) => {
-            if (error) {
-                return reject(error);
-            }
-            if (stderr) {
-                console.error(`⚠️ Avisos del publicador de hilos: ${stderr}`);
-            }
-            console.log(stdout);
-            resolve();
-        });
-    });
-};
-
-// Función auxiliar para recorrer recursivamente las respuestas de un hilo propias
-const extractOwnThreadPosts = (threadNode, repoDid) => {
-    let threadPosts = [];
-
-    if (threadNode && threadNode.post && threadNode.post.author.did === repoDid) {
-        threadPosts.push(threadNode.post);
-    }
-
-    if (threadNode && threadNode.replies && threadNode.replies.length > 0) {
-        const ownReplies = threadNode.replies.filter(reply => reply.post && reply.post.author.did === repoDid);
-        for (const reply of ownReplies) {
-            threadPosts = threadPosts.concat(extractOwnThreadPosts(reply, repoDid));
-        }
-    }
-
-    return threadPosts;
-};
-
-// Función auxiliar para procesar los metadatos y medios de un post de Bluesky
-const processPostData = async (post, repoDid, agent) => {
-    const currentRkey = post.uri.split('/').pop();
-    const postRecord = post.record;
-    const textContent = postRecord.text || "";
-    
-    const hashtagMatches = textContent.match(/#[^\s#]+/g) || [];
-    const cleanHashtags = hashtagMatches.map(tag => tag.replace(/[\.,\/#!$%\^&\*;:{}=\-_`~()]$/, ""));
-
-    const postData = {
-        uri: post.uri,
-        rkey: currentRkey,
-        text: textContent,
-        hashtags: cleanHashtags,
-        createdAt: postRecord.createdAt || "",
-        hasMedia: false,
-        mediaType: null,
-        mediaUrls: [],
-        externalLink: null,
-        video: null
-    };
-
-    if (postRecord.embed) {
-        postData.hasMedia = true;
-        postData.mediaType = postRecord.embed.$type;
-
-        let imageBlobs = [];
-
-        if (postRecord.embed.images && postRecord.embed.images.length > 0) {
-            imageBlobs = postRecord.embed.images.map(img => {
-                return img.image?.ref?.toString() || img.image?.ref;
-            }).filter(Boolean);
-        }
-
-        if (imageBlobs.length > 0) {
-            if (!fs.existsSync(TEMP_MEDIA_DIR)) {
-                fs.mkdirSync(TEMP_MEDIA_DIR, { recursive: true });
-            }
-
-            const localImagePaths = [];
-            for (let imgIdx = 0; imgIdx < imageBlobs.length; imgIdx++) {
-                const blobCid = imageBlobs[imgIdx];
-                let descargadoExitosamente = false;
-                let intentos = 0;
-                const maxIntentos = 3;
-
-                while (!descargadoExitosamente && intentos < maxIntentos) {
-                    intentos++;
-                    try {
-                        console.log(`📥 [Intento ${intentos}/${maxIntentos}] Descargando blob desde PDS (CID: ${blobCid})...`);
-                        const blobRes = await agent.com.atproto.sync.getBlob({
-                            did: repoDid,
-                            cid: blobCid
-                        });
-
-                        if (blobRes && blobRes.data) {
-                            const buffer = Buffer.from(blobRes.data);
-                            const localFileName = `bsky_${currentRkey}_${imgIdx}.jpg`;
-                            const localFilePath = path.join(TEMP_MEDIA_DIR, localFileName);
-                            
-                            fs.writeFileSync(localFilePath, buffer);
-                            localImagePaths.push(localFilePath);
-                            console.log(`✅ Imagen guardada en disco: ${localFilePath}`);
-                            descargadoExitosamente = true;
-                        } else {
-                            console.warn(`⚠️ Intento ${intentos} fallido. Reintentando en 3 segundos...`);
-                            if (intentos < maxIntentos) await sleep(3000);
-                        }
-                    } catch (imgErr) {
-                        console.warn(`⚠️ Excepción en intento ${intentos}: ${imgErr.message}. Reintentando en 3 segundos...`);
-                        if (intentos < maxIntentos) await sleep(3000);
-                    }
-                }
-
-                if (!descargadoExitosamente) {
-                    console.error(`❌ No se pudo descargar el blob ${imgIdx + 1} tras ${maxIntentos} intentos.`);
-                }
-            }
-            postData.mediaUrls = localImagePaths;
-        }
-
-        if (postRecord.embed.$type === 'app.bsky.embed.external' && postRecord.embed.external) {
-            postData.externalLink = {
-                uri: postRecord.embed.external.uri,
-                title: postRecord.embed.external.title,
-                description: postRecord.embed.external.description,
-                thumbUrl: post.embed?.external?.thumb?.ref ? `https://cdn.bsky.social/img/feed_thumbnail/plain/${repoDid}/${post.embed.external.thumb.ref.toString()}` : null
-            };
-        }
-
-        if (postData.externalLink && post.embed?.external?.thumb?.ref) {
-            console.log("🖼️ Detectada imagen en card externa. Intentando rescatar...");
-            const thumbCid = post.embed.external.thumb.ref.toString();
-            
-            try {
-                const blobRes = await agent.com.atproto.sync.getBlob({
-                    did: repoDid,
-                    cid: thumbCid
-                });
-
-                if (blobRes && blobRes.data) {
-                    const buffer = Buffer.from(blobRes.data);
-                    const localFileName = `bsky_card_${currentRkey}.jpg`;
-                    const localFilePath = path.join(TEMP_MEDIA_DIR, localFileName);
-                    
-                    fs.writeFileSync(localFilePath, buffer);
-                    postData.mediaUrls.push(localFilePath);
-                    console.log(`✅ Imagen de card guardada en: ${localFilePath}`);
-                }
-            } catch (err) {
-                console.warn("⚠️ No se pudo rescatar la imagen de la card externa, continuando...");
-            }
-        }
-
-        if (postRecord.embed.$type === 'app.bsky.embed.video') {
-            postData.video = {
-                playlist: post.embed?.playlist || null,
-                thumbnail: post.embed?.thumbnail || null,
-                alt: postRecord.embed.alt || null,
-                aspectRatio: postRecord.embed.aspectRatio || null,
-            };
-        }
-    }
-
-    return postData;
 };
 
 (async () => {
@@ -261,6 +98,7 @@ const processPostData = async (post, repoDid, agent) => {
 
             fs.writeFileSync(HISTORY_FILE, JSON.stringify(history, null, 2), 'utf-8');
             console.log(`🔒 Base establecida. Se han registrado ${history.length} posts actuales en history.json.`);
+            console.log("👉 Ejecuta de nuevo cuando publiques un post nuevo para verificar la generación de post.json.");
             return;
         }
 
@@ -282,146 +120,155 @@ const processPostData = async (post, repoDid, agent) => {
         for (let i = 0; i < pendingPosts.length; i++) {
             const targetPostInfo = pendingPosts[i];
             
-            if (publishedRkeys.has(targetPostInfo.rkey)) {
-                continue;
-            }
-
             console.log(`\n--- Procesando post [${i + 1} de ${pendingPosts.length}] rkey: ${targetPostInfo.rkey} ---`);
+            console.log(`📄 Texto: "${targetPostInfo.post.record.text || ""}"`);
 
-            console.log(`📡 Consultando la estructura de hilo/conversación en Bluesky...`);
-            let postsToProcess = [];
+            console.log(`📡 Obteniendo datos detallados...`);
+            const response = await agent.getPosts({
+                uris: [targetPostInfo.uri],
+            });
 
-            try {
-                const threadResponse = await agent.getPostThread({ uri: targetPostInfo.uri });
-                if (threadResponse.data && threadResponse.data.thread) {
-                    postsToProcess = extractOwnThreadPosts(threadResponse.data.thread, repoDid);
-                }
-            } catch (threadErr) {
-                console.warn(`⚠️ No se pudo obtener la estructura del hilo (${threadErr.message}). Se procesará solo el post principal.`);
-            }
-
-            if (postsToProcess.length === 0) {
-                const response = await agent.getPosts({ uris: [targetPostInfo.uri] });
-                if (response.data.posts[0]) {
-                    postsToProcess.push(response.data.posts[0]);
-                }
-            }
-
-            if (postsToProcess.length === 0) {
+            const post = response.data.posts[0];
+            if (!post) {
                 console.error("❌ No se ha podido recuperar el detalle del post. Saltando al siguiente...");
                 continue;
             }
 
-            // ==========================================
-            // RAMIFICACIÓN: HILO vs POST INDIVIDUAL
-            // ==========================================
-            if (postsToProcess.length > 1) {
-                console.log(`🧵 Se ha detectado un hilo propio con ${postsToProcess.length} mensajes. Agrupando para hilo...`);
-                
-                let threadPostsData = [];
+            const postRecord = post.record;
 
-                for (let tIdx = 0; tIdx < postsToProcess.length; tIdx++) {
-                    const post = postsToProcess[tIdx];
-                    const currentRkey = post.uri.split('/').pop();
-                    
-                    if (publishedRkeys.has(currentRkey)) {
-                        continue;
-                    }
+            const textContent = postRecord.text || "";
+            const hashtagMatches = textContent.match(/#[^\s#]+/g) || [];
+            const cleanHashtags = hashtagMatches.map(tag => tag.replace(/[\.,\/#!$%\^&\*;:{}=\-_`~()]$/, ""));
 
-                    console.log(`\n  └─ 📦 Preparando elemento de hilo ${tIdx + 1} de ${postsToProcess.length} (rkey: ${currentRkey})`);
-                    const postData = await processPostData(post, repoDid, agent);
+            const postData = {
+                uri: targetPostInfo.uri,
+                text: textContent,
+                hashtags: cleanHashtags,
+                createdAt: postRecord.createdAt || "",
+                hasMedia: false,
+                mediaType: null,
+                mediaUrls: [],
+                externalLink: null,
+                video: null
+            };
 
-                    // Filtro de vídeo nativo individual dentro del hilo
-                    if (postData.mediaType === 'app.bsky.embed.video') {
-                        console.log("🎥 Detectado un vídeo nativo en este eslabón del hilo. Omitiendo este elemento específico.");
-                        history.push({
-                            rkey: currentRkey,
-                            uri: post.uri,
-                            createdAt: postData.createdAt || new Date().toISOString()
-                        });
-                        publishedRkeys.add(currentRkey);
-                        fs.writeFileSync(HISTORY_FILE, JSON.stringify(history, null, 2), 'utf-8');
-                        continue;
-                    }
+            if (postRecord.embed) {
+                postData.hasMedia = true;
+                postData.mediaType = postRecord.embed.$type;
 
-                    threadPostsData.push(postData);
+                let imageBlobs = [];
+
+                if (postRecord.embed.images && postRecord.embed.images.length > 0) {
+                    imageBlobs = postRecord.embed.images.map(img => {
+                        return img.image?.ref?.toString() || img.image?.ref;
+                    }).filter(Boolean);
                 }
 
-                if (threadPostsData.length > 0) {
-                    // Guardamos el archivo consolidado para hilos
-                    fs.writeFileSync(THREAD_JSON_FILE, JSON.stringify(threadPostsData, null, 2), 'utf-8');
-                    console.log(`💾 Archivo thread.json generado con éxito (${threadPostsData.length} eslabones).`);
-
-                    // Actualizamos history para todos los elementos del hilo incluidos
-                    for (const item of threadPostsData) {
-                        history.push({
-                            rkey: item.rkey,
-                            uri: item.uri,
-                            createdAt: item.createdAt || new Date().toISOString()
-                        });
-                        publishedRkeys.add(item.rkey);
+                // Descargar imágenes directamente desde el PDS usando getBlob (sin pasar por CDNs públicos)
+                if (imageBlobs.length > 0) {
+                    if (!fs.existsSync(TEMP_MEDIA_DIR)) {
+                        fs.mkdirSync(TEMP_MEDIA_DIR, { recursive: true });
                     }
-                    fs.writeFileSync(HISTORY_FILE, JSON.stringify(history, null, 2), 'utf-8');
-                    console.log(`📝 history.json actualizado con los elementos del hilo.`);
 
-                    // Disparamos el publicador de hilos (Script 3)
-                    console.log("🚀 Disparando script de publicación de hilos en Substack...");
-                    try {
-                        await runThreadPublisher();
-                        console.log("🏁 Publicación de hilo finalizada con éxito.");
-                    } catch (pubError) {
-                        console.error(`❌ Error al ejecutar el publicador de hilos: ${pubError.message}`);
+                    const localImagePaths = [];
+                    for (let imgIdx = 0; imgIdx < imageBlobs.length; imgIdx++) {
+                        const blobCid = imageBlobs[imgIdx];
+                        let descargadoExitosamente = false;
+                        let intentos = 0;
+                        const maxIntentos = 3;
+
+                        while (!descargadoExitosamente && intentos < maxIntentos) {
+                            intentos++;
+                            try {
+                                console.log(`📥 [Intento ${intentos}/${maxIntentos}] Descargando blob desde PDS (CID: ${blobCid})...`);
+                                const blobRes = await agent.com.atproto.sync.getBlob({
+                                    did: repoDid,
+                                    cid: blobCid
+                                });
+
+                                if (blobRes && blobRes.data) {
+                                    const buffer = Buffer.from(blobRes.data);
+                                    const localFileName = `bsky_${targetPostInfo.rkey}_${imgIdx}.jpg`;
+                                    const localFilePath = path.join(TEMP_MEDIA_DIR, localFileName);
+                                    
+                                    fs.writeFileSync(localFilePath, buffer);
+                                    localImagePaths.push(localFilePath);
+                                    console.log(`✅ Imagen guardada en disco: ${localFilePath}`);
+                                    descargadoExitosamente = true;
+                                } else {
+                                    console.warn(`⚠️ Intento ${intentos} fallido. Reintentando en 3 segundos...`);
+                                    if (intentos < maxIntentos) await sleep(3000);
+                                }
+                            } catch (imgErr) {
+                                console.warn(`⚠️ Excepción en intento ${intentos}: ${imgErr.message}. Reintentando en 3 segundos...`);
+                                if (intentos < maxIntentos) await sleep(3000);
+                            }
+                        }
+
+                        if (!descargadoExitosamente) {
+                            console.error(`❌ No se pudo descargar el blob ${imgIdx + 1} tras ${maxIntentos} intentos.`);
+                        }
                     }
+                    postData.mediaUrls = localImagePaths;
                 }
 
-            } else {
-                // CASO POST INDIVIDUAL TRADICIONAL
-                const post = postsToProcess[0];
-                const currentRkey = post.uri.split('/').pop();
-
-                if (publishedRkeys.has(currentRkey)) {
-                    continue;
+                if (postRecord.embed.$type === 'app.bsky.embed.external' && postRecord.embed.external) {
+                    postData.externalLink = {
+                        uri: postRecord.embed.external.uri,
+                        title: postRecord.embed.external.title,
+                        description: postRecord.embed.external.description,
+                        thumbUrl: post.embed?.external?.thumb?.ref ? `https://cdn.bsky.social/img/feed_thumbnail/plain/${repoDid}/${post.embed.external.thumb.ref.toString()}` : null
+                    };
                 }
 
-                console.log(`\n  └─ 📝 Publicando post individual (rkey: ${currentRkey})`);
-                const postData = await processPostData(post, repoDid, agent);
-
-                if (postData.mediaType === 'app.bsky.embed.video') {
-                    console.log("🎥 Detectado un vídeo nativo de Bluesky. Omitiendo la publicación en Substack.");
-                    history.push({
-                        rkey: currentRkey,
-                        uri: post.uri,
-                        createdAt: postData.createdAt || new Date().toISOString()
-                    });
-                    publishedRkeys.add(currentRkey);
-                    fs.writeFileSync(HISTORY_FILE, JSON.stringify(history, null, 2), 'utf-8');
-                    continue;
-                }
-
-                fs.writeFileSync(POST_JSON_FILE, JSON.stringify(postData, null, 2), 'utf-8');
-                console.log(`💾 Archivo post.json generado con éxito.`);
-
-                history.push({
-                    rkey: currentRkey,
-                    uri: post.uri,
-                    createdAt: postData.createdAt || new Date().toISOString()
-                });
-                publishedRkeys.add(currentRkey);
-                fs.writeFileSync(HISTORY_FILE, JSON.stringify(history, null, 2), 'utf-8');
-                console.log(`📝 history.json actualizado correctamente.`);
-
-                console.log("🚀 Disparando script de publicación en Substack...");
-                try {
-                    await runPublisher();
-                    console.log("🏁 Publicación individual finalizada con éxito.");
-                } catch (pubError) {
-                    console.error(`❌ Error al ejecutar el publicador para este post: ${pubError.message}`);
+                if (postRecord.embed.$type === 'app.bsky.embed.video') {
+                    postData.video = {
+                        playlist: post.embed?.playlist || null,
+                        thumbnail: post.embed?.thumbnail || null,
+                        alt: postRecord.embed.alt || null,
+                        aspectRatio: postRecord.embed.aspectRatio || null,
+                    };
                 }
             }
 
-            // Pausa entre elementos distintos de la cola
+            // --- FILTRO DE VÍDEOS NATIVOS ---
+            if (postData.mediaType === 'app.bsky.embed.video') {
+                console.log("🎥 Detectado un vídeo nativo de Bluesky (formato m3u8). Omitiendo la publicación en Substack tal como solicitaste.");
+                
+                history.push({
+                    rkey: targetPostInfo.rkey,
+                    uri: targetPostInfo.uri,
+                    createdAt: postRecord.createdAt || new Date().toISOString()
+                });
+                fs.writeFileSync(HISTORY_FILE, JSON.stringify(history, null, 2), 'utf-8');
+                console.log(`📝 history.json actualizado (vídeo nativo omitido en Substack).`);
+                
+                continue;
+            }
+
+            fs.writeFileSync(POST_JSON_FILE, JSON.stringify(postData, null, 2), 'utf-8');
+            console.log(`💾 Archivo post.json generado con éxito.`);
+
+            history.push({
+                rkey: targetPostInfo.rkey,
+                uri: targetPostInfo.uri,
+                createdAt: postRecord.createdAt || new Date().toISOString()
+            });
+            fs.writeFileSync(HISTORY_FILE, JSON.stringify(history, null, 2), 'utf-8');
+            console.log(`📝 history.json actualizado correctamente.`);
+
+            // --- DISPARAR EL SCRIPT 2 Y ESPERAR ---
+            console.log("🚀 Disparando script de publicación en Substack...");
+            try {
+                await runPublisher();
+                console.log("🏁 Publicación individual finalizada con éxito.");
+            } catch (pubError) {
+                console.error(`❌ Error al ejecutar el publicador para este post: ${pubError.message}`);
+            }
+
+            // Pausa de 2 minutos entre posts si hay más en la cola
             if (i < pendingPosts.length - 1) {
-                console.log("⏳ Esperando 2 minutos antes de procesar el siguiente elemento pendiente...");
+                console.log("⏳ Esperando 2 minutos antes de procesar el siguiente post...");
                 await sleep(120000); 
             }
         }

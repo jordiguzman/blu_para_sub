@@ -1,15 +1,18 @@
 {
-  "uri": "at://did:plc:7rxajtbhdi4fpelalnmu35it/app.bsky.feed.post/3muijlvr26s2x",
-  "text": "Test image BandCamp",
-  "hashtags": [],
-  "createdAt": "2026-09-01T23:00:48.720Z",
+  "uri": "at://did:plc:7rxajtbhdi4fpelalnmu35it/app.bsky.feed.post/3mujv5dtcu72h",
+  "text": "Ambient Selection:\n\nCome Rain Come Shine\nby Drift Ritual\n\n#music #ambient",
+  "hashtags": [
+    "#music",
+    "#ambient"
+  ],
+  "createdAt": "2026-09-02T12:00:04Z",
   "hasMedia": true,
   "mediaType": "app.bsky.embed.external",
   "mediaUrls": [],
   "externalLink": {
-    "uri": "https://mentat1.bandcamp.com/track/at-patriarchs-ponds",
-    "title": "At Patriarch's Ponds, by Mentat",
-    "description": "from the album Pleased To Meet You",
+    "uri": "https://driftritual.bandcamp.com/album/come-rain-come-shine",
+    "title": "Come Rain Come Shine",
+    "description": "11 track album",
     "thumbUrl": null
   },
   "video": null
