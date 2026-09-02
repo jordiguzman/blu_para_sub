@@ -1,14 +1,14 @@
 {
-  "uri": "at://did:plc:7rxajtbhdi4fpelalnmu35it/app.bsky.feed.post/3mukrswafzs2c",
-  "text": "Test post con enlace",
+  "uri": "at://did:plc:7rxajtbhdi4fpelalnmu35it/app.bsky.feed.post/3mukwhnmy722c",
+  "text": "Test con enlace",
   "hashtags": [],
-  "createdAt": "2026-09-02T20:33:13.516Z",
+  "createdAt": "2026-09-02T21:56:24.101Z",
   "hasMedia": true,
   "mediaType": "app.bsky.embed.external",
   "mediaUrls": [],
   "externalLink": {
-    "uri": "https://mentat1.bandcamp.com/track/mars",
-    "title": "Mars, by Mentat",
+    "uri": "https://mentat1.bandcamp.com/track/pluto",
+    "title": "Pluto, by Mentat",
     "description": "from the album Solar System",
     "thumbUrl": null
   },

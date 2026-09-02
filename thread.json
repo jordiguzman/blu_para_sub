@@ -1,26 +1,33 @@
 [
   {
-    "uri": "at://did:plc:7rxajtbhdi4fpelalnmu35it/app.bsky.feed.post/3muimxqqukc2x",
-    "rkey": "3muimxqqukc2x",
-    "text": "Test hilo 1",
+    "uri": "at://did:plc:7rxajtbhdi4fpelalnmu35it/app.bsky.feed.post/3mukwzpxsx22c",
+    "rkey": "3mukwzpxsx22c",
+    "text": "Test hilo con imagenes",
     "hashtags": [],
-    "createdAt": "2026-09-02T00:01:07.350Z",
-    "hasMedia": false,
-    "mediaType": null,
-    "mediaUrls": [],
+    "createdAt": "2026-09-02T22:06:30.532Z",
+    "hasMedia": true,
+    "mediaType": "app.bsky.embed.images",
+    "mediaUrls": [
+      "D:\\PHP\\Scripts en Hosting\\blu_para_sub\\temp_media\\bsky_3mukwzpxsx22c_0.jpg"
+    ],
     "externalLink": null,
     "video": null
   },
   {
-    "uri": "at://did:plc:7rxajtbhdi4fpelalnmu35it/app.bsky.feed.post/3muimxqqzgk2x",
-    "rkey": "3muimxqqzgk2x",
-    "text": "Test hilo 2",
+    "uri": "at://did:plc:7rxajtbhdi4fpelalnmu35it/app.bsky.feed.post/3mukwztdbgc2c",
+    "rkey": "3mukwztdbgc2c",
+    "text": "Test hilo con enlace\nmentat1.bandcamp.com/track/sun-2",
     "hashtags": [],
-    "createdAt": "2026-09-02T00:01:07.351Z",
-    "hasMedia": false,
-    "mediaType": null,
+    "createdAt": "2026-09-02T22:06:30.533Z",
+    "hasMedia": true,
+    "mediaType": "app.bsky.embed.external",
     "mediaUrls": [],
-    "externalLink": null,
+    "externalLink": {
+      "uri": "https://mentat1.bandcamp.com/track/sun-2",
+      "title": "Sun, by Mentat",
+      "description": "from the album Solar System",
+      "thumbUrl": null
+    },
     "video": null
   }
 ]

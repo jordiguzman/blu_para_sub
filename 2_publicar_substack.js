@@ -184,5 +184,18 @@ require('dotenv').config({ path: path.join(__dirname, 'config', '.env') });
         console.error("❌ Error durante la ejecución:", error);
     } finally {
         await browser.close();
+        // --- LIMPIEZA DE LA CARPETA TEMP_MEDIA ---
+        try {
+            const tempDir = path.join(__dirname, 'temp_media');
+            if (fs.existsSync(tempDir)) {
+                const files = fs.readdirSync(tempDir);
+                for (const file of files) {
+                    fs.unlinkSync(path.join(tempDir, file));
+                }
+                console.log("🧹 Carpeta temp_media limpiada correctamente.");
+            }
+        } catch (cleanErr) {
+            console.error("⚠️ No se pudo limpiar la carpeta temp_media:", cleanErr.message);
+        }
     }
 })();

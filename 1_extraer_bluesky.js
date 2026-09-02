@@ -1,12 +1,14 @@
 const { BskyAgent } = require('@atproto/api');
 const path = require('path');
 const fs = require('fs');
-const { exec } = require('child_process');
+const { exec, spawn } = require('child_process');
 require('dotenv').config({ path: path.join(__dirname, 'config', '.env') });
 
 const HISTORY_FILE = path.join(__dirname, 'history.json');
 const POST_JSON_FILE = path.join(__dirname, 'post.json');
+const THREAD_JSON_FILE = path.join(__dirname, 'thread.json');
 const SCRIPT_2_PATH = path.join(__dirname, '2_publicar_substack.js');
+const SCRIPT_3_PATH = path.join(__dirname, '3_publicar_hilo.js');
 const TEMP_MEDIA_DIR = path.join(__dirname, 'temp_media');
 
 // Función auxiliar para crear pausas (en milisegundos)
@@ -24,6 +26,25 @@ const runPublisher = () => {
             }
             console.log(stdout);
             resolve();
+        });
+    });
+};
+
+// Función auxiliar para ejecutar el script 3 de hilos usando Spawn de forma segura ante espacios en rutas
+const runThreadPublisher = () => {
+    return new Promise((resolve, reject) => {
+        const child = spawn(process.execPath, [SCRIPT_3_PATH], { stdio: 'inherit' });
+
+        child.on('close', (code) => {
+            if (code === 0) {
+                resolve();
+            } else {
+                reject(new Error(`El publicador de hilos finalizó con código de error ${code}`));
+            }
+        });
+
+        child.on('error', (err) => {
+            reject(err);
         });
     });
 };
@@ -121,6 +142,147 @@ const runPublisher = () => {
             const targetPostInfo = pendingPosts[i];
             
             console.log(`\n--- Procesando post [${i + 1} de ${pendingPosts.length}] rkey: ${targetPostInfo.rkey} ---`);
+
+            console.log(`🧵 Verificando si este post forma parte de un hilo...`);
+            const threadRes = await agent.getPostThread({ uri: targetPostInfo.uri, depth: 10, parentHeight: 0 });
+            const threadRoot = threadRes.data.thread;
+
+            let rawChainPosts = [];
+            function crawlThread(node, did, collection) {
+                if (!node || !node.post || node.post.author.did !== did) return;
+                collection.push(node.post);
+                if (node.replies && node.replies.length > 0) {
+                    const nextSelfReply = node.replies.find(r => r.post && r.post.author.did === did);
+                    if (nextSelfReply) {
+                        crawlThread(nextSelfReply, did, collection);
+                    }
+                }
+            }
+            crawlThread(threadRoot, repoDid, rawChainPosts);
+
+            if (rawChainPosts.length > 1) {
+                console.log(`🔗 ¡Se ha detectado un hilo con ${rawChainPosts.length} eslabones! Procesando cadena completa...`);
+
+                const threadPostsData = [];
+                const newHistoryEntries = [];
+
+                for (let idx = 0; idx < rawChainPosts.length; idx++) {
+                    const chainPost = rawChainPosts[idx];
+                    const chainUri = chainPost.uri;
+                    const chainRkey = chainUri.split('/').pop();
+                    const chainRecord = chainPost.record;
+
+                    const textContent = chainRecord.text || "";
+                    const hashtagMatches = textContent.match(/#[^\s#]+/g) || [];
+                    const cleanHashtags = hashtagMatches.map(tag => tag.replace(/[\.,\/#!$%\^&\*;:{}=\-_`~()]$/, ""));
+
+                    const postData = {
+                        uri: chainUri,
+                        rkey: chainRkey,
+                        text: textContent,
+                        hashtags: cleanHashtags,
+                        createdAt: chainRecord.createdAt || "",
+                        hasMedia: false,
+                        mediaType: null,
+                        mediaUrls: [],
+                        externalLink: null,
+                        video: null
+                    };
+
+                    if (chainRecord.embed) {
+                        postData.hasMedia = true;
+                        postData.mediaType = chainRecord.embed.$type;
+
+                        let imageBlobs = [];
+                        if (chainRecord.embed.images && chainRecord.embed.images.length > 0) {
+                            imageBlobs = chainRecord.embed.images.map(img => {
+                                return img.image?.ref?.toString() || img.image?.ref;
+                            }).filter(Boolean);
+                        }
+
+                        if (imageBlobs.length > 0) {
+                            if (!fs.existsSync(TEMP_MEDIA_DIR)) {
+                                fs.mkdirSync(TEMP_MEDIA_DIR, { recursive: true });
+                            }
+
+                            const localImagePaths = [];
+                            for (let imgIdx = 0; imgIdx < imageBlobs.length; imgIdx++) {
+                                const blobCid = imageBlobs[imgIdx];
+                                let descargadoExitosamente = false;
+                                let intentos = 0;
+                                const maxIntentos = 3;
+
+                                while (!descargadoExitosamente && intentos < maxIntentos) {
+                                    intentos++;
+                                    try {
+                                        const blobRes = await agent.com.atproto.sync.getBlob({
+                                            did: repoDid,
+                                            cid: blobCid
+                                        });
+
+                                        if (blobRes && blobRes.data) {
+                                            const buffer = Buffer.from(blobRes.data);
+                                            const localFileName = `bsky_${chainRkey}_${imgIdx}.jpg`;
+                                            const localFilePath = path.join(TEMP_MEDIA_DIR, localFileName);
+                                            
+                                            fs.writeFileSync(localFilePath, buffer);
+                                            localImagePaths.push(localFilePath);
+                                            descargadoExitosamente = true;
+                                        } else {
+                                            if (intentos < maxIntentos) await sleep(3000);
+                                        }
+                                    } catch (imgErr) {
+                                        if (intentos < maxIntentos) await sleep(3000);
+                                    }
+                                }
+                            }
+                            postData.mediaUrls = localImagePaths;
+                        }
+
+                        if (chainRecord.embed.$type === 'app.bsky.embed.external' && chainRecord.embed.external) {
+                            postData.externalLink = {
+                                uri: chainRecord.embed.external.uri,
+                                title: chainRecord.embed.external.title,
+                                description: chainRecord.embed.external.description,
+                                thumbUrl: chainPost.embed?.external?.thumb?.ref ? `https://cdn.bsky.social/img/feed_thumbnail/plain/${repoDid}/${chainPost.embed.external.thumb.ref.toString()}` : null
+                            };
+                        }
+                    }
+
+                    if (postData.mediaType === 'app.bsky.embed.video') {
+                        console.log(`🎥 Omitiendo eslabón con vídeo nativo en el hilo.`);
+                        newHistoryEntries.push({ rkey: chainRkey, uri: chainUri, createdAt: chainRecord.createdAt || new Date().toISOString() });
+                        continue;
+                    }
+
+                    threadPostsData.push(postData);
+                    newHistoryEntries.push({ rkey: chainRkey, uri: chainUri, createdAt: chainRecord.createdAt || new Date().toISOString() });
+                }
+
+                if (threadPostsData.length > 0) {
+                    fs.writeFileSync(THREAD_JSON_FILE, JSON.stringify(threadPostsData, null, 2), 'utf-8');
+                    console.log(`💾 Archivo thread.json generado con ${threadPostsData.length} eslabones.`);
+                }
+
+                for (const entry of newHistoryEntries) {
+                    if (!history.some(h => h.rkey === entry.rkey)) {
+                        history.push(entry);
+                    }
+                }
+                fs.writeFileSync(HISTORY_FILE, JSON.stringify(history, null, 2), 'utf-8');
+                console.log(`📝 history.json actualizado con todos los eslabones del hilo.`);
+
+                console.log("🚀 Disparando script de publicación de hilos...");
+                try {
+                    await runThreadPublisher();
+                    console.log("🏁 Publicación de hilo finalizada con éxito.");
+                } catch (threadPubError) {
+                    console.error(`❌ Error al ejecutar el publicador de hilos: ${threadPubError.message}`);
+                }
+
+                continue;
+            }
+
             console.log(`📄 Texto: "${targetPostInfo.post.record.text || ""}"`);
 
             console.log(`📡 Obteniendo datos detallados...`);
@@ -164,7 +326,6 @@ const runPublisher = () => {
                     }).filter(Boolean);
                 }
 
-                // Descargar imágenes directamente desde el PDS usando getBlob (sin pasar por CDNs públicos)
                 if (imageBlobs.length > 0) {
                     if (!fs.existsSync(TEMP_MEDIA_DIR)) {
                         fs.mkdirSync(TEMP_MEDIA_DIR, { recursive: true });
@@ -180,7 +341,6 @@ const runPublisher = () => {
                         while (!descargadoExitosamente && intentos < maxIntentos) {
                             intentos++;
                             try {
-                                console.log(`📥 [Intento ${intentos}/${maxIntentos}] Descargando blob desde PDS (CID: ${blobCid})...`);
                                 const blobRes = await agent.com.atproto.sync.getBlob({
                                     did: repoDid,
                                     cid: blobCid
@@ -193,20 +353,13 @@ const runPublisher = () => {
                                     
                                     fs.writeFileSync(localFilePath, buffer);
                                     localImagePaths.push(localFilePath);
-                                    console.log(`✅ Imagen guardada en disco: ${localFilePath}`);
                                     descargadoExitosamente = true;
                                 } else {
-                                    console.warn(`⚠️ Intento ${intentos} fallido. Reintentando en 3 segundos...`);
                                     if (intentos < maxIntentos) await sleep(3000);
                                 }
                             } catch (imgErr) {
-                                console.warn(`⚠️ Excepción en intento ${intentos}: ${imgErr.message}. Reintentando en 3 segundos...`);
                                 if (intentos < maxIntentos) await sleep(3000);
                             }
-                        }
-
-                        if (!descargadoExitosamente) {
-                            console.error(`❌ No se pudo descargar el blob ${imgIdx + 1} tras ${maxIntentos} intentos.`);
                         }
                     }
                     postData.mediaUrls = localImagePaths;
@@ -231,9 +384,8 @@ const runPublisher = () => {
                 }
             }
 
-            // --- FILTRO DE VÍDEOS NATIVOS ---
             if (postData.mediaType === 'app.bsky.embed.video') {
-                console.log("🎥 Detectado un vídeo nativo de Bluesky (formato m3u8). Omitiendo la publicación en Substack tal como solicitaste.");
+                console.log("🎥 Detectado un vídeo nativo de Bluesky. Omitiendo la publicación en Substack.");
                 
                 history.push({
                     rkey: targetPostInfo.rkey,
@@ -241,7 +393,6 @@ const runPublisher = () => {
                     createdAt: postRecord.createdAt || new Date().toISOString()
                 });
                 fs.writeFileSync(HISTORY_FILE, JSON.stringify(history, null, 2), 'utf-8');
-                console.log(`📝 history.json actualizado (vídeo nativo omitido en Substack).`);
                 
                 continue;
             }
@@ -257,7 +408,6 @@ const runPublisher = () => {
             fs.writeFileSync(HISTORY_FILE, JSON.stringify(history, null, 2), 'utf-8');
             console.log(`📝 history.json actualizado correctamente.`);
 
-            // --- DISPARAR EL SCRIPT 2 Y ESPERAR ---
             console.log("🚀 Disparando script de publicación en Substack...");
             try {
                 await runPublisher();
@@ -266,7 +416,6 @@ const runPublisher = () => {
                 console.error(`❌ Error al ejecutar el publicador para este post: ${pubError.message}`);
             }
 
-            // Pausa de 2 minutos entre posts si hay más en la cola
             if (i < pendingPosts.length - 1) {
                 console.log("⏳ Esperando 2 minutos antes de procesar el siguiente post...");
                 await sleep(120000); 
