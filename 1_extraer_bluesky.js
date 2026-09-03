@@ -9,6 +9,7 @@ const POST_JSON_FILE = path.join(__dirname, 'post.json');
 const THREAD_JSON_FILE = path.join(__dirname, 'thread.json');
 const SCRIPT_2_PATH = path.join(__dirname, '2_publicar_substack.js');
 const SCRIPT_3_PATH = path.join(__dirname, '3_publicar_hilo.js');
+const SCRIPT_4_PATH = path.join(__dirname, '4_enriquecer_imagen_card.js');
 const TEMP_MEDIA_DIR = path.join(__dirname, 'temp_media');
 
 // Función auxiliar para crear pausas (en milisegundos)
@@ -40,6 +41,25 @@ const runThreadPublisher = () => {
                 resolve();
             } else {
                 reject(new Error(`El publicador de hilos finalizó con código de error ${code}`));
+            }
+        });
+
+        child.on('error', (err) => {
+            reject(err);
+        });
+    });
+};
+
+// Función auxiliar para ejecutar el script 4 de Bandcamp usando Spawn de forma segura ante espacios en rutas
+const runBandcampPublisher = () => {
+    return new Promise((resolve, reject) => {
+        const child = spawn(process.execPath, [SCRIPT_4_PATH], { stdio: 'inherit' });
+
+        child.on('close', (code) => {
+            if (code === 0) {
+                resolve();
+            } else {
+                reject(new Error(`El publicador de Bandcamp finalizó con código de error ${code}`));
             }
         });
 
@@ -408,12 +428,24 @@ const runThreadPublisher = () => {
             fs.writeFileSync(HISTORY_FILE, JSON.stringify(history, null, 2), 'utf-8');
             console.log(`📝 history.json actualizado correctamente.`);
 
-            console.log("🚀 Disparando script de publicación en Substack...");
-            try {
-                await runPublisher();
-                console.log("🏁 Publicación individual finalizada con éxito.");
-            } catch (pubError) {
-                console.error(`❌ Error al ejecutar el publicador para este post: ${pubError.message}`);
+            const esBandcamp = postData.externalLink && postData.externalLink.uri && postData.externalLink.uri.includes('bandcamp.com');
+
+            if (esBandcamp) {
+                console.log("🎵 [BANDCAMP DETECTADO] Derivando al script 4...");
+                try {
+                    await runBandcampPublisher();
+                    console.log("🏁 Publicación de Bandcamp finalizada con éxito.");
+                } catch (bcError) {
+                    console.error(`❌ Error al ejecutar el publicador de Bandcamp: ${bcError.message}`);
+                }
+            } else {
+                console.log("🚀 Disparando script de publicación estándar en Substack...");
+                try {
+                    await runPublisher();
+                    console.log("🏁 Publicación individual finalizada con éxito.");
+                } catch (pubError) {
+                    console.error(`❌ Error al ejecutar el publicador para este post: ${pubError.message}`);
+                }
             }
 
             if (i < pendingPosts.length - 1) {

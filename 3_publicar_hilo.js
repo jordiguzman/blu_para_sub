@@ -1,10 +1,11 @@
-const puppeteer = require('puppeteer-core');
+const puppeteer = require('puppeteer-extra');
+const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+puppeteer.use(StealthPlugin());
 const path = require('path');
 const fs = require('fs');
 require('dotenv').config({ path: path.join(__dirname, 'config', '.env') });
 
 const THREAD_JSON_FILE = path.join(__dirname, 'thread.json');
-const COOKIES_PATH = path.join(__dirname, 'config', 'cookies.json');
 const CHROME_PATH = process.env.CHROME_PATH || "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -30,7 +31,7 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
         process.exit(0);
     }
 
-    console.log(`🎯 Se procesarán ${threadPosts.length} eslabones del hilo de forma independiente.`);
+    console.log(`🎯 Se procesarán ${threadPosts.length} eslabones del hilo secuencialmente.`);
 
     for (let i = 0; i < threadPosts.length; i++) {
         const postData = threadPosts[i];
@@ -40,71 +41,92 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
         try {
             browser = await puppeteer.launch({
                 executablePath: CHROME_PATH,
-                headless: false,
-                defaultViewport: null,
-                args: ['--start-maximized']
+                headless: 'new',
+                args: ['--no-sandbox', '--disable-setuid-sandbox', '--window-size=1280,800']
             });
 
             const page = await browser.newPage();
+            await page.setViewport({ width: 1280, height: 800 });
 
-            if (fs.existsSync(COOKIES_PATH)) {
-                const cookiesString = fs.readFileSync(COOKIES_PATH, 'utf8');
-                const cookies = JSON.parse(cookiesString);
-                await page.setCookie(...cookies);
+            const connectSid = process.env.SUBSTACK_CONNECT_SID;
+            const cfClearance = process.env.SUBSTACK_CF_CLEARANCE;
+            const cfBm = process.env.SUBSTACK_CF_BM;
+
+            if (!connectSid || !cfClearance || !cfBm) {
+                console.error("❌ Error: Faltan variables en el .env (SUBSTACK_CONNECT_SID, SUBSTACK_CF_CLEARANCE, SUBSTACK_CF_BM)");
+                await browser.close();
+                process.exit(1);
             }
 
-            console.log("🌐 Navegando a Substack Notes...");
+            await page.setCookie(
+                { name: 'substack.sid', value: connectSid, domain: '.substack.com', path: '/', httpOnly: true, secure: true },
+                { name: 'cf_clearance', value: cfClearance, domain: '.substack.com', path: '/', httpOnly: true, secure: true },
+                { name: '__cf_bm', value: cfBm, domain: '.substack.com', path: '/', httpOnly: true, secure: true }
+            );
+
+            console.log("🍪 Cookies inyectadas. Abriendo Substack Notes...");
             await page.goto('https://substack.com/notes', { waitUntil: 'networkidle2' });
             await sleep(5000);
 
-            console.log("✍️ Buscando el campo de texto...");
-            const editorSelector = 'div[contenteditable="true"]';
-            await page.waitForSelector(editorSelector, { timeout: 15000 });
-            
-            const editor = await page.$(editorSelector);
-            
-            if (!editor) {
-                throw new Error("No se encontró el editor editable en Substack.");
-            }
+            console.log("🔍 Abriendo el editor...");
+            const composerSelector = 'div.inlineComposer-v8PLSi';
+            await page.waitForSelector(composerSelector, { visible: true, timeout: 5000 });
+            await page.click(composerSelector);
+            console.log("🖱️ ¡Editor abierto!");
+            await sleep(1500);
 
-            await editor.click();
-            await sleep(1000);
-
-            let finalText = postData.text;
+            let finalText = postData.text.trim();
             if (postData.hashtags && postData.hashtags.length > 0) {
                 const tagsString = postData.hashtags.join(' ');
                 finalText = `${finalText}\n\n${tagsString}`;
             }
 
-            console.log("⌨️ Escribiendo contenido...");
-            await page.keyboard.type(finalText, { delay: 20 });
+            console.log("📝 Asegurando foco y escribiendo texto en el editor...");
+            const editorHandle = await page.$('div.inlineComposer-v8PLSi [contenteditable="true"]');
+            if (editorHandle) {
+                await editorHandle.click();
+            }
+            await sleep(1000);
+            await page.keyboard.type(finalText, { delay: 40 });
             await sleep(2000);
 
-            if (postData.hasMedia && postData.mediaUrls && postData.mediaUrls.length > 0) {
-                console.log(`🖼️ Adjuntando ${postData.mediaUrls.length} imagen(es)...`);
-                const fileInput = await page.$('input[type="file"]');
-                if (fileInput) {
-                    await fileInput.uploadFile(...postData.mediaUrls);
-                    console.log("⏳ Esperando a que las imágenes se procesen...");
-                    await sleep(8000);
-                } else {
-                    console.warn("⚠️ No se encontró el input de ficheros para adjuntar la imagen.");
-                }
+            console.log("🔍 Buscando el botón 'Post'...");
+            const postButtonInfo = await page.evaluate(() => {
+                const buttons = Array.from(document.querySelectorAll('button'));
+                const candidatos = buttons.filter(el => el.textContent.trim() === 'Post');
+                if (candidatos.length === 0) return { found: false };
+                const el = candidatos.find(b => b.offsetParent !== null) || candidatos[0];
+                const isDisabled = el.disabled === true
+                    || el.getAttribute('aria-disabled') === 'true'
+                    || el.classList.contains('disabled');
+                return { found: true, disabled: isDisabled };
+            });
+
+            if (!postButtonInfo.found || postButtonInfo.disabled) {
+                throw new Error("El botón 'Post' no está disponible o sigue deshabilitado.");
             }
 
-            console.log("🚀 Publicando nota...");
-            const publishButtonSelector = 'button.primary.button';
-            await page.waitForSelector(publishButtonSelector, { timeout: 10000 });
-            
-            const publishButton = await page.$(publishButtonSelector);
-            if (publishButton) {
-                await publishButton.click();
-                console.log("✅ Eslabón publicado con éxito.");
-                await sleep(5000);
+            console.log("🖱️ Botón 'Post' localizado y habilitado. Haciendo clic...");
+            const publishResponsePromise = page.waitForResponse(
+                response => response.request().method() === 'POST'
+                    && (response.url().includes('comment') || response.url().includes('note') || response.url().includes('feed')),
+                { timeout: 15000 }
+            ).catch(() => null);
+
+            await page.evaluate(() => {
+                const buttons = Array.from(document.querySelectorAll('button'));
+                const el = buttons.find(b => b.textContent.trim() === 'Post');
+                if (el) el.click();
+            });
+
+            const publishResponse = await publishResponsePromise;
+            if (publishResponse && publishResponse.ok()) {
+                console.log(`🎉 Confirmado por red: el eslabón se publicó correctamente (HTTP ${publishResponse.status()})`);
             } else {
-                throw new Error("No se pudo localizar el botón de publicación.");
+                console.log("⚠️ No se pudo confirmar por red, pero el clic fue realizado.");
             }
 
+            await sleep(5000);
             await browser.close();
 
         } catch (error) {
@@ -112,12 +134,12 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
             if (browser) {
                 await browser.close().catch(() => {});
             }
-            throw error; 
+            throw error;
         }
 
         if (i < threadPosts.length - 1) {
-            console.log("⏳ Esperando 60 segundos antes de publicar el siguiente eslabón del hilo...");
-            await sleep(60000);
+            console.log("⏳ Esperando 2 minutos antes de publicar el siguiente eslabón del hilo...");
+            await sleep(120000);
         }
     }
 
