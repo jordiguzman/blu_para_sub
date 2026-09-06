@@ -1,16 +1,12 @@
 {
-  "uri": "at://did:plc:7rxajtbhdi4fpelalnmu35it/app.bsky.feed.post/3munebuop622f",
-  "text": "Test texto con BC",
+  "uri": "at://did:plc:7rxajtbhdi4fpelalnmu35it/app.bsky.feed.post/3mustl754as2f",
+  "text": "Test texto y BC",
   "hashtags": [],
-  "createdAt": "2026-09-03T21:09:02.033Z",
-  "hasMedia": true,
-  "mediaType": "app.bsky.embed.external",
   "mediaUrls": [],
   "externalLink": {
     "uri": "https://mentat1.bandcamp.com/track/satans-grand-ball",
     "title": "Satan's Grand Ball, by Mentat",
     "description": "from the album Pleased To Meet You",
-    "thumbUrl": null
-  },
-  "video": null
+    "thumbUrl": "https://bsky.social/xrpc/com.atproto.sync.getBlob?did=did:plc:7rxajtbhdi4fpelalnmu35it&cid=bafkreicr4aob6hlt2ypo7wt62zwzzxbvzgbv7fgdoxlbx5mavf5wnzn7le"
+  }
 }

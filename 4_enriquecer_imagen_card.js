@@ -6,12 +6,17 @@ const fs = require('fs');
 require('dotenv').config({ path: path.join(__dirname, 'config', '.env') });
 
 const POST_JSON_FILE = path.join(__dirname, 'post.json');
-const CHROME_PATH = process.env.CHROME_PATH || "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
+
+const CHROME_PATH = process.env.CHROME_PATH || (
+    process.platform === 'win32' 
+        ? "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
+        : undefined
+);
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 (async () => {
-    console.log("🚀 [BANDCAMP PUBLISHER - PASO 5] Iniciando publicación con manejo de enlaces...");
+    console.log("🚀 [BANDCAMP PUBLISHER - PASO 5] Iniciando publicación con manejo de imágenes y enlaces...");
 
     if (!fs.existsSync(POST_JSON_FILE)) {
         console.error("❌ No se encontró el archivo post.json.");
@@ -28,11 +33,16 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
     let browser;
     try {
-        browser = await puppeteer.launch({
-            executablePath: CHROME_PATH,
+        const launchOptions = {
             headless: 'new',
             args: ['--no-sandbox', '--disable-setuid-sandbox', '--window-size=1280,800']
-        });
+        };
+
+        if (CHROME_PATH) {
+            launchOptions.executablePath = CHROME_PATH;
+        }
+
+        browser = await puppeteer.launch(launchOptions);
 
         const page = await browser.newPage();
         await page.setViewport({ width: 1280, height: 800 });
@@ -64,23 +74,52 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
         console.log("🖱️ ¡Editor abierto!");
         await sleep(1500);
 
-        let finalText = postData.text.trim();
-        if (postData.externalLink && postData.externalLink.uri) {
-            finalText = `${finalText}\n\n${postData.externalLink.uri}`;
-        }
+        let mainText = postData.text.trim();
         if (postData.hashtags && postData.hashtags.length > 0) {
             const tagsString = postData.hashtags.join(' ');
-            finalText = `${finalText}\n\n${tagsString}`;
+            mainText = `${mainText}\n\n${tagsString}`;
         }
 
-        console.log("📝 Asegurando foco y escribiendo texto y enlace en el editor...");
+        console.log("📝 Asegurando foco y escribiendo texto en el editor...");
         const editorHandle = await page.$('div.inlineComposer-v8PLSi [contenteditable="true"]');
         if (editorHandle) {
             await editorHandle.click();
         }
         await sleep(1000);
-        await page.keyboard.type(finalText, { delay: 40 });
-        await sleep(4000);
+
+        if (mainText) {
+            await page.keyboard.type(mainText, { delay: 30 });
+            await sleep(1500);
+        }
+
+        // --- GESTIÓN DE IMÁGENES LOCALES DESCARGADAS CON LOGS DETALLADOS ---
+        const tieneImagenes = postData.mediaUrls && postData.mediaUrls.length > 0;
+        if (tieneImagenes) {
+            const localImagePaths = postData.mediaUrls.filter(filePath => fs.existsSync(filePath));
+
+            if (localImagePaths.length > 0) {
+                console.log(`📁 [LOG DE IMAGEN] Usando ${localImagePaths.length} imágenes preparadas localmente:`, localImagePaths);
+                const fileInputHandles = await page.$$('input[type="file"]');
+                if (fileInputHandles.length > 0) {
+                    const targetInput = fileInputHandles[0];
+                    await targetInput.uploadFile(...localImagePaths);
+                    console.log("📤 [LOG DE IMAGEN] Archivos de imagen entregados al input de Substack correctamente.");
+                    await sleep(8000);
+                } else {
+                    console.log("⚠️ [LOG DE IMAGEN] No se encontró ningún input[type='file'] en el DOM de Substack.");
+                }
+            } else {
+                console.log("⚠️ [LOG DE IMAGEN] Las rutas de mediaUrls están en el JSON pero los ficheros físicos no se encuentran en disco.");
+            }
+        } else {
+            console.log("ℹ️ [LOG DE IMAGEN] No hay imágenes registradas en mediaUrls para este post.");
+        }
+
+        if (postData.externalLink && postData.externalLink.uri) {
+            console.log(`🔗 Escribiendo enlace de Bandcamp: ${postData.externalLink.uri}`);
+            await page.keyboard.type(`\n\n${postData.externalLink.uri}`, { delay: 30 });
+            await sleep(4000);
+        }
 
         console.log("🔍 Buscando el botón 'Post'...");
         const postButtonInfo = await page.evaluate(() => {
@@ -113,7 +152,7 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
         const publishResponse = await publishResponsePromise;
         if (publishResponse && publishResponse.ok()) {
-            console.log(`🎉 Confirmado por red: la nota de Bandcamp con tarjeta se publicó correctamente (HTTP ${publishResponse.status()})`);
+            console.log(`🎉 Confirmado por red: la nota de Bandcamp con imagen adjunta se publicó correctamente (HTTP ${publishResponse.status()})`);
         } else {
             console.log("⚠️ No se pudo confirmar por red, pero el clic fue realizado.");
         }
