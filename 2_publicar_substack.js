@@ -159,7 +159,6 @@ const HISTORY_FILE = path.join(__dirname, 'history.json');
         if (publishResponse && publishResponse.ok()) {
             console.log(`🎉 Confirmado por red: la nota se publicó correctamente (HTTP ${publishResponse.status()})`);
             
-            // --- ACTUALIZACIÓN DIRECTA DEL HISTORIAL ---
             let history = [];
             if (fs.existsSync(HISTORY_FILE)) {
                 try {
@@ -179,7 +178,6 @@ const HISTORY_FILE = path.join(__dirname, 'history.json');
             fs.writeFileSync(HISTORY_FILE, JSON.stringify(history, null, 2), 'utf8');
             console.log("✨ [HISTORIAL] Post registrado como SUCCESS en history.json");
 
-            // Borrar el contrato post.json ya procesado con éxito
             if (fs.existsSync(jsonPath)) {
                 fs.unlinkSync(jsonPath);
             }
@@ -194,8 +192,6 @@ const HISTORY_FILE = path.join(__dirname, 'history.json');
         console.error("❌ Error durante la ejecución:", error);
     } finally {
         await browser.close();
-<<<<<<< Updated upstream
-=======
         try {
             const tempDir = path.join(__dirname, 'temp_media');
             if (fs.existsSync(tempDir)) {
@@ -207,6 +203,5 @@ const HISTORY_FILE = path.join(__dirname, 'history.json');
         } catch (cleanErr) {
             console.error("⚠️ No se pudo limpiar la carpeta temp_media:", cleanErr.message);
         }
->>>>>>> Stashed changes
     }
 })();
