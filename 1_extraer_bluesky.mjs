@@ -156,7 +156,7 @@ async function run() {
 
         console.log("🚀 [EXTRACTOR] Lanzando el script de publicación...");
         try {
-            execSync('node 2_publicar_substack.js', { stdio: 'inherit', cwd: __dirname });
+            execSync('node 2_publicar_substack.mjs', { stdio: 'inherit', cwd: __dirname });
         } catch (pubError) {
             console.error(`❌ [PUBLICADOR] Error al ejecutar el script de publicación: ${pubError.message}`);
         }
