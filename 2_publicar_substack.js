@@ -1,11 +1,25 @@
-const puppeteer = require('puppeteer-extra');
-const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+import puppeteer from 'puppeteer-extra';
+import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 puppeteer.use(StealthPlugin());
-const path = require('path');
-const fs = require('fs');
-require('dotenv').config({ path: path.join(__dirname, 'config', '.env') });
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
+import dotenv from 'dotenv';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+dotenv.config({ path: path.join(__dirname, 'config', '.env') });
+
+const HISTORY_FILE = path.join(__dirname, 'history.json');
 
 (async () => {
+    const jsonPath = path.join(__dirname, 'post.json');
+    if (!fs.existsSync(jsonPath)) {
+        console.log("ℹ️ No se encuentra el archivo post.json. No hay nada pendiente de publicar.");
+        process.exit(0);
+    }
+
     console.log("🚀 [PUBLICADOR] Iniciando navegador...");
 
     const browser = await puppeteer.launch({
@@ -48,49 +62,36 @@ require('dotenv').config({ path: path.join(__dirname, 'config', '.env') });
         await new Promise(r => setTimeout(r, 1500));
 
         console.log("✍️ Leyendo post.json...");
-        const jsonPath = path.join(__dirname, 'post.json');
-        if (!fs.existsSync(jsonPath)) {
-            console.error("❌ Error: No se encuentra el archivo post.json.");
-            await browser.close();
-            process.exit(1);
-        }
         const postData = JSON.parse(fs.readFileSync(jsonPath, 'utf-8'));
 
-        // --- LÓGICA DE PRIORIZACIÓN DE IMÁGENES VS CARDS ---
-        const tieneImagenes = postData.hasMedia && postData.mediaUrls && postData.mediaUrls.length > 0;
-        
+        const tieneImagenes = postData.mediaUrls && postData.mediaUrls.length > 0;
         let textoFinal = postData.text.trim();
         let enlaceParaAlFinal = null;
 
-        if (tieneImagenes && postData.mediaType === 'app.bsky.embed.external' && postData.externalLink && postData.externalLink.uri) {
+        if (tieneImagenes && postData.type === 'link' && postData.externalLink && postData.externalLink.uri) {
             enlaceParaAlFinal = postData.externalLink.uri;
             textoFinal = textoFinal.replace(enlaceParaAlFinal, '').trim();
         }
 
-        // --- INICIO DE MODIFICACIÓN: OPCIÓN 1 (Foco estricto y tecleo robusto) ---
         console.log("📝 Asegurando foco y escribiendo texto en el editor...");
         const editorHandle = await page.$('div.inlineComposer-v8PLSi [contenteditable="true"]');
         if (editorHandle) {
             await editorHandle.click();
         }
-        await new Promise(r => setTimeout(r, 1000)); // Pausa de estabilización del foco
+        await new Promise(r => setTimeout(r, 1000));
         await page.keyboard.type(textoFinal, { delay: 40 });
         await new Promise(r => setTimeout(r, 2000));
-        // --- FIN DE MODIFICACIÓN: OPCIÓN 1 ---
 
-        // --- GESTIÓN DE IMÁGENES LOCALES YA DESCARGADAS ---
         if (tieneImagenes) {
             const localImagePaths = postData.mediaUrls.filter(filePath => fs.existsSync(filePath));
 
             if (localImagePaths.length === 0) {
-                console.error("❌ ERROR CRÍTICO: El post debía tener imágenes pero no se encuentran los ficheros locales en el servidor.");
+                console.error("❌ ERROR CRÍTICO: El post debía tener imágenes pero no se encuentran los ficheros locales.");
                 await browser.close();
                 return;
             }
 
             console.log(`📁 Usando ${localImagePaths.length} imágenes preparadas localmente.`);
-
-            console.log("🔍 Buscando el input de subida de archivo dentro del editor...");
             const inputsInfo = await page.evaluate(() => {
                 const inputs = Array.from(document.querySelectorAll('input[type="file"]'));
                 return inputs.map((el, i) => ({
@@ -100,37 +101,24 @@ require('dotenv').config({ path: path.join(__dirname, 'config', '.env') });
                 }));
             });
 
-            if (inputsInfo.length === 0) {
-                console.log("⚠️ No se encontró ningún input de tipo file en la página.");
-            } else {
+            if (inputsInfo.length > 0) {
                 const targetIndex = inputsInfo.findIndex(i => i.accept && i.accept.includes('image'));
                 const chosenIndex = targetIndex !== -1 ? targetIndex : 0;
-                console.log(`🎯 Usando el input número ${chosenIndex}`);
-
                 const fileInputHandles = await page.$$('input[type="file"]');
                 const targetInput = fileInputHandles[chosenIndex];
 
                 await targetInput.uploadFile(...localImagePaths);
-                console.log(`📤 ${localImagePaths.length} archivos entregados al input simultáneamente.`);
-
-                console.log("⏳ Esperando a que Substack procese y suba las imágenes...");
+                console.log(`📤 ${localImagePaths.length} archivos entregados al input.`);
                 await new Promise(r => setTimeout(r, 8000));
             }
-
-            const screenshotPath = path.join(__dirname, 'debug_imagenes_subidas.png');
-            await page.screenshot({ path: screenshotPath, fullPage: false });
-            console.log(`📸 Captura guardada en: ${screenshotPath}`);
-        } else {
-            console.log("ℹ️ Este post no tiene imágenes adjuntas.");
         }
 
-        // --- ENLACE EXTERNO ---
         if (enlaceParaAlFinal) {
             console.log(`🔗 Añadiendo enlace externo al final: ${enlaceParaAlFinal}`);
             await page.keyboard.type('\n\n' + enlaceParaAlFinal, { delay: 40 });
             await new Promise(r => setTimeout(r, 4000));
-        } else if (!tieneImagenes && postData.mediaType === 'app.bsky.embed.external' && postData.externalLink && postData.externalLink.uri) {
-            console.log(`🔗 Añadiendo enlace externo (Bandcamp): ${postData.externalLink.uri}`);
+        } else if (!tieneImagenes && (postData.type === 'bandcamp' || postData.type === 'link') && postData.externalLink && postData.externalLink.uri) {
+            console.log(`🔗 Añadiendo enlace externo (${postData.type}): ${postData.externalLink.uri}`);
             await page.keyboard.type('\n\n' + postData.externalLink.uri, { delay: 40 });
             await new Promise(r => setTimeout(r, 4000));
         }
@@ -148,15 +136,13 @@ require('dotenv').config({ path: path.join(__dirname, 'config', '.env') });
         });
 
         if (!postButtonInfo.found || postButtonInfo.disabled) {
-            console.log("⚠️ El botón 'Post' no está disponible o sigue deshabilitado (las imágenes pueden seguir procesándose).");
-            console.log("🛑 Dejando el navegador abierto 10 segundos para revisar.");
+            console.log("⚠️ El botón 'Post' no está disponible o sigue deshabilitado.");
             await new Promise(r => setTimeout(r, 10000));
             await browser.close();
             return;
         }
 
         console.log("🖱️ Botón 'Post' localizado y habilitado. Haciendo clic...");
-
         const publishResponsePromise = page.waitForResponse(
             response => response.request().method() === 'POST'
                 && (response.url().includes('comment') || response.url().includes('note') || response.url().includes('feed')),
@@ -170,11 +156,35 @@ require('dotenv').config({ path: path.join(__dirname, 'config', '.env') });
         });
 
         const publishResponse = await publishResponsePromise;
-
         if (publishResponse && publishResponse.ok()) {
             console.log(`🎉 Confirmado por red: la nota se publicó correctamente (HTTP ${publishResponse.status()})`);
+            
+            // --- ACTUALIZACIÓN DIRECTA DEL HISTORIAL ---
+            let history = [];
+            if (fs.existsSync(HISTORY_FILE)) {
+                try {
+                    history = JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf8'));
+                } catch (e) {
+                    history = [];
+                }
+            }
+
+            history.push({
+                uri: postData.uri,
+                status: 'SUCCESS',
+                createdAt: postData.createdAt,
+                timestamp: new Date().toISOString()
+            });
+
+            fs.writeFileSync(HISTORY_FILE, JSON.stringify(history, null, 2), 'utf8');
+            console.log("✨ [HISTORIAL] Post registrado como SUCCESS en history.json");
+
+            // Borrar el contrato post.json ya procesado con éxito
+            if (fs.existsSync(jsonPath)) {
+                fs.unlinkSync(jsonPath);
+            }
         } else {
-            console.log("⚠️ No se pudo confirmar por red, revisa visualmente el navegador.");
+            console.log("⚠️ No se pudo confirmar por red de forma estricta, revisa visualmente el navegador.");
         }
 
         console.log("🛑 Dejando el navegador abierto 10 segundos para verificar el resultado.");
@@ -184,5 +194,19 @@ require('dotenv').config({ path: path.join(__dirname, 'config', '.env') });
         console.error("❌ Error durante la ejecución:", error);
     } finally {
         await browser.close();
+<<<<<<< Updated upstream
+=======
+        try {
+            const tempDir = path.join(__dirname, 'temp_media');
+            if (fs.existsSync(tempDir)) {
+                fs.readdirSync(tempDir).forEach(file => {
+                    fs.unlinkSync(path.join(tempDir, file));
+                });
+                console.log("🧹 Carpeta temp_media limpiada correctamente.");
+            }
+        } catch (cleanErr) {
+            console.error("⚠️ No se pudo limpiar la carpeta temp_media:", cleanErr.message);
+        }
+>>>>>>> Stashed changes
     }
 })();
