@@ -7,6 +7,28 @@ require('dotenv').config({ path: path.join(__dirname, 'config', '.env') });
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
+// NUEVO: ruta al historial, coherente con el resto del proyecto
+const HISTORY_FILE = path.join(__dirname, 'history.json');
+
+// NUEVO: añade una entrada SUCCESS al historial de forma segura (lee, añade, escribe)
+function marcarComoExitoso(uri, createdAt) {
+    let history = [];
+    if (fs.existsSync(HISTORY_FILE)) {
+        try {
+            history = JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf-8'));
+        } catch (e) {
+            history = [];
+        }
+    }
+    history.push({
+        uri,
+        status: 'SUCCESS',
+        createdAt,
+        timestamp: new Date().toISOString()
+    });
+    fs.writeFileSync(HISTORY_FILE, JSON.stringify(history, null, 2), 'utf-8');
+}
+
 (async () => {
     console.log("🧵 [PUBLICADOR DE HILOS] Iniciando navegador...");
 
@@ -31,6 +53,8 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
     const page = await browser.newPage();
     await page.setViewport({ width: 1280, height: 800 });
+
+    let todosPublicadosOk = true; // NUEVO: para decidir si limpiamos thread.json al final
 
     try {
         const connectSid = process.env.SUBSTACK_CONNECT_SID;
@@ -63,8 +87,6 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
             await page.click(composerSelector);
             await sleep(1500);
 
-            // Si es una respuesta dentro del hilo, podemos simular la réplica o encadenado si la interfaz lo permite,
-            // o publicar secuencialmente asegurando el texto y los enlaces correspondientes.
             let tieneImagenes = postData.hasMedia && postData.mediaUrls && postData.mediaUrls.length > 0;
             let textoFinal = postData.text.trim();
             let enlaceParaAlFinal = null;
@@ -75,28 +97,23 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
             }
 
             console.log("📝 Escribiendo texto en el editor de forma limpia...");
-// Hacemos clic asegurando el foco
-await page.click(composerSelector);
-await new Promise(r => setTimeout(r, 500));
+            await page.click(composerSelector);
+            await new Promise(r => setTimeout(r, 500));
 
-// Inyectamos el texto completo de golpe simulando pegado o asignación de valor al elemento activo,
-// evitando por completo el desfase de pulsaciones de teclado que se come las primeras letras.
-await page.evaluate((texto) => {
-    const activeEl = document.activeElement;
-    if (activeEl) {
-        // Si es un div editable (contenteditable) de Substack
-        if (activeEl.isContentEditable) {
-            activeEl.textContent = texto;
-        } else if (activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'INPUT') {
-            activeEl.value = texto;
-        }
-        // Disparamos eventos de input para que Substack detecte el cambio de estado y active el botón Post
-        activeEl.dispatchEvent(new Event('input', { bubbles: true }));
-        activeEl.dispatchEvent(new Event('change', { bubbles: true }));
-    }
-}, textoFinal);
+            await page.evaluate((texto) => {
+                const activeEl = document.activeElement;
+                if (activeEl) {
+                    if (activeEl.isContentEditable) {
+                        activeEl.textContent = texto;
+                    } else if (activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'INPUT') {
+                        activeEl.value = texto;
+                    }
+                    activeEl.dispatchEvent(new Event('input', { bubbles: true }));
+                    activeEl.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+            }, textoFinal);
 
-await new Promise(r => setTimeout(r, 1500));
+            await new Promise(r => setTimeout(r, 1500));
 
             if (tieneImagenes) {
                 const localImagePaths = postData.mediaUrls.filter(filePath => fs.existsSync(filePath));
@@ -138,11 +155,12 @@ await new Promise(r => setTimeout(r, 1500));
             const publishResponse = await publishResponsePromise;
             if (publishResponse && publishResponse.ok()) {
                 console.log(`🎉 Eslabón ${i + 1} publicado correctamente.`);
+                marcarComoExitoso(postData.uri, postData.createdAt); // NUEVO
             } else {
                 console.log(`⚠️ Eslabón ${i + 1} enviado, revisa visualmente.`);
+                todosPublicadosOk = false; // NUEVO: no confirmado, no lo damos por bueno
             }
 
-            // Pausa entre eslabones del hilo para evitar bloqueos por rate-limit
             if (i < threadPosts.length - 1) {
                 console.log("⏳ Esperando 5 segundos antes de publicar el siguiente eslabón del hilo...");
                 await sleep(5000);
@@ -150,6 +168,13 @@ await new Promise(r => setTimeout(r, 1500));
         }
 
         console.log("\n🏁 ¡Hilo completo publicado con éxito en Substack!");
+
+        // NUEVO: si todo se confirmó, thread.json ya no hace falta (igual que hace 2_publicar_substack.mjs con post.json)
+        if (todosPublicadosOk) {
+            const threadJsonPath = path.join(__dirname, 'thread.json');
+            if (fs.existsSync(threadJsonPath)) fs.unlinkSync(threadJsonPath);
+        }
+
         await sleep(5000);
 
     } catch (error) {

@@ -1,0 +1,217 @@
+RESUMEN DEL PROYECTO blu_para_sub
+================================
+
+Descripcion general
+--------------------
+Proyecto Node.js y PHP para automatizar la extraccion de publicaciones propias
+de Bluesky y su republicacion en Substack Notes. El flujo principal detecta
+publicaciones nuevas, prepara un contrato JSON temporal, descarga miniaturas
+cuando es necesario y publica el contenido mediante un navegador automatizado.
+
+Flujo principal
+---------------
+1. 1_extraer_bluesky.mjs inicia sesion en Bluesky y consulta hasta 30 posts
+  propios sin respuestas.
+2. history.json evita volver a procesar publicaciones ya conocidas o publicadas.
+3. Para el primer arranque se crea una linea base y no se publica nada.
+4. Para cada post nuevo se genera post.json y se prepara temp_media/.
+5. El extractor lanza 2_publicar_substack.mjs.
+6. El publicador abre Substack Notes, inserta texto e imagenes, publica y
+  registra el resultado SUCCESS en history.json.
+7. 3_publicar_hilo.js permite publicar varios posts de thread.json de forma
+  secuencial.
+8. 4_enriquecer_imagen_card.js descarga miniaturas de enlaces Bandcamp que no
+  tienen todavia un archivo local y actualiza post.json o thread.json.
+
+SCRIPTS
+=======
+
+1_extraer_bluesky.mjs
+---------------------
+Extractor y orquestador del flujo individual.
+
+- Carga credenciales desde config/.env mediante dotenv.
+- Usa @atproto/api para iniciar sesion en https://bsky.social.
+- Consulta el feed del usuario con filter posts_no_replies y limit 30.
+- Obtiene el DID del perfil y filtra para conservar solo publicaciones propias.
+- Usa process.lock para impedir dos ejecuciones simultaneas durante 15 minutos.
+- Lee history.json. Si no existe o esta vacio, registra los posts actuales como
+  INITIAL_BASELINE y termina sin publicar.
+- Ignora posts ya marcados como SUCCESS o INITIAL_BASELINE.
+- Escoge el post pendiente mas antiguo.
+- Clasifica enlaces externos como bandcamp o link.
+- Descarga la miniatura de un enlace externo a temp_media/ cuando existe.
+- Genera post.json con uri, rkey, fecha, tipo, texto, mediaUrls y externalLink.
+- Ejecuta 2_publicar_substack.mjs mediante execSync.
+- Elimina el bloqueo al terminar, incluso cuando se produce un error.
+
+2_publicar_substack.mjs
+-----------------------
+Publicador de un post individual en Substack Notes.
+
+- Usa puppeteer-extra con el plugin stealth para automatizar Chromium.
+- Lee las cookies de sesion de Substack desde config/.env.
+- Abre https://substack.com/notes y espera a que cargue el editor.
+- Sale sin publicar si no existe post.json.
+- Lee el contrato generado por el extractor.
+- Escribe el texto en el editor contenteditable.
+- Sube las imagenes locales indicadas en mediaUrls.
+- Si hay imagen y enlace externo, quita el enlace del texto y lo vuelve a
+  anadir al final. Para enlaces sin imagen tambien anade la URL al final.
+- Hace clic en el boton Post y espera una respuesta HTTP POST relacionada con
+  comment, note o feed.
+- Si la respuesta es correcta, anade un registro SUCCESS a history.json y
+  elimina post.json.
+- Cierra el navegador y limpia temp_media al finalizar.
+
+3_publicar_hilo.js
+------------------
+Publicador secuencial de hilos almacenados en thread.json.
+
+- Usa CommonJS (require), aunque el package.json declara type module; por ello
+  debe ejecutarse teniendo en cuenta la configuracion de Node y la extension.
+- Valida que thread.json exista y contenga al menos un elemento.
+- Abre Substack Notes con Puppeteer y las cookies de config/.env.
+- Procesa cada elemento del array en orden.
+- Escribe el texto completo mediante document.activeElement y eventos input y
+  change, evitando perdidas de caracteres al simular pulsaciones.
+- Sube las imagenes indicadas por hasMedia y mediaUrls.
+- Anade enlaces externos al final cuando corresponde.
+- Publica cada eslabon y comprueba una respuesta HTTP relacionada con la nota.
+- Espera cinco segundos entre publicaciones para reducir el riesgo de
+  limitaciones de frecuencia.
+- Cierra el navegador al terminar.
+- No actualiza history.json, por lo que el control de duplicados del hilo no
+  esta cubierto por este script.
+
+4_enriquecer_imagen_card.js
+---------------------------
+Enriquecedor de publicaciones Bandcamp.
+
+- Usa axios para descargar blobs desde el endpoint AT Protocol
+  com.atproto.sync.getBlob.
+- Procesa post.json y thread.json si existen.
+- Acepta tanto un objeto individual como un array de posts.
+- Detecta enlaces cuya URL contiene bandcamp.com.
+- Obtiene el CID de la miniatura desde externalLink.thumb.ref o variantes
+  compatibles.
+- Obtiene el DID desde authorDid o desde la URI at:// del post.
+- Descarga la miniatura como bandcamp_<rkey>.jpg en temp_media/.
+- Marca hasMedia como true y agrega la ruta relativa temp_media/... a
+  mediaUrls, evitando duplicados.
+- Reescribe el JSON solo cuando hubo cambios.
+
+ARCHIVOS JSON
+=============
+
+package.json
+------------
+Manifesto del proyecto Node.js.
+
+- Proyecto: blu_para_sub, version 1.0.0.
+- Declara type module.
+- Dependencias directas: @atproto/api, axios, dotenv, puppeteer,
+  puppeteer-extra y puppeteer-extra-plugin-stealth.
+- No tiene una prueba automatizada configurada: npm test termina con un error
+  intencionado indicando que no hay tests.
+- El campo main apunta a index.js, archivo que no aparece en la lista actual.
+
+package-lock.json
+-----------------
+Lockfile npm version 3 generado para fijar versiones concretas y hashes de
+integridad de las dependencias Node.js.
+
+- Repite las dependencias directas de package.json.
+- Registra las versiones resueltas y dependencias transitivas de npm.
+- Incluye entre otras @atproto/api 0.20.34 y la informacion de Puppeteer,
+  Axios, dotenv y los plugins extra.
+- Su objetivo es que npm install reproduzca el mismo arbol de paquetes.
+- No es logica de la aplicacion y no debe editarse manualmente salvo casos
+  excepcionales.
+
+composer.json
+-------------
+Configuracion de dependencias PHP.
+
+- Requiere guzzlehttp/guzzle ^7.15 para peticiones HTTP.
+- Requiere vlucas/phpdotenv ^5.6 para cargar variables de entorno.
+- Relaciona la parte PHP del proyecto con publish_to_substack.php e index.php.
+
+composer.lock
+-------------
+Lockfile de Composer.
+
+- Fija las versiones exactas de las dependencias PHP y sus dependencias
+  transitivas.
+- Incluye Guzzle, PSR, Symfony polyfills, phpdotenv y librerias auxiliares.
+- Permite reproducir el mismo entorno PHP usando composer install.
+- Es un archivo generado de dependencias, no un flujo ejecutable por si mismo.
+
+history.json
+------------
+Registro persistente del estado de procesamiento de posts de Bluesky.
+
+- Es un array de objetos con uri, status, createdAt y timestamp.
+- INITIAL_BASELINE representa posts presentes durante el primer arranque y
+  evita publicarlos retroactivamente.
+- SUCCESS representa posts publicados correctamente en Substack.
+- El contenido actual contiene entradas INITIAL_BASELINE y dos entradas SUCCESS.
+- 1_extraer_bluesky.mjs lo consulta para detectar pendientes.
+- 2_publicar_substack.mjs lo actualiza despues de una confirmacion HTTP exitosa.
+
+thread.json
+-----------
+Entrada de datos para publicar un hilo.
+
+- Es un array de dos posts de prueba.
+- Cada elemento contiene uri, rkey, text, hashtags, createdAt, hasMedia,
+  mediaType, mediaUrls, externalLink y video.
+- 3_publicar_hilo.js lo lee en orden y publica cada elemento.
+- Las rutas de mediaUrls se esperan como rutas locales accesibles desde el
+  proceso que ejecuta el script.
+
+post_real.json.bak
+------------------
+Copia de seguridad con extension .bak.
+
+- El archivo existe, pero actualmente esta vacio.
+- No participa automaticamente en el flujo porque los scripts buscan
+  post.json, no post_real.json.bak.
+
+ARCHIVOS JSON TEMPORALES ESPERADOS
+==================================
+
+post.json
+---------
+No existe actualmente, pero 1_extraer_bluesky.mjs lo genera para entregar un
+post individual a 2_publicar_substack.mjs. Contiene uri, rkey, createdAt, type,
+text, mediaUrls y externalLink. El publicador lo elimina despues de una
+publicacion confirmada.
+
+CONFIGURACION Y EXCLUSIONES
+============================
+
+- config/.env contiene secretos y cookies de Bluesky/Substack; no se incluye
+  su contenido en este resumen.
+- temp_media/ almacena temporalmente imagenes descargadas y se limpia despues
+  de publicar un post individual.
+- node_modules/ y vendor/ son dependencias instaladas y quedan fuera del
+  resumen detallado, tal como se solicito.
+- index.php, publish_to_substack.php y feed.xml existen en el proyecto, pero
+  no se detallan porque la solicitud se limita a scripts JS/MJS y JSON.
+
+Observaciones tecnicas
+----------------------
+
+- La automatizacion depende de selectores concretos de la interfaz de
+  Substack, como inlineComposer-v8PLSi y el boton Post.
+- Las cookies de Substack deben estar vigentes y definidas en config/.env.
+- La declaracion type module de package.json y el uso de require en
+  3_publicar_hilo.js pueden requerir una comprobacion de compatibilidad de
+  Node.js antes de ejecutar ese archivo.
+- La deteccion de exito depende de observar una respuesta de red; si Substack
+  cambia sus endpoints, el script puede publicar sin confirmarlo o no detectar
+  correctamente el resultado.
+- El lock process.lock se crea usando process.cwd(), mientras que otros
+  archivos se resuelven con __dirname; conviene ejecutar el extractor desde la
+  raiz del proyecto.
