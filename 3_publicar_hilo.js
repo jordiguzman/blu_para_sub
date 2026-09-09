@@ -7,10 +7,9 @@ require('dotenv').config({ path: path.join(__dirname, 'config', '.env') });
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-// NUEVO: ruta al historial, coherente con el resto del proyecto
 const HISTORY_FILE = path.join(__dirname, 'history.json');
+const PROFILE_DIR = path.join(__dirname, 'chrome_profile'); // NUEVO: mismo perfil que usa 2_publicar_substack.mjs
 
-// NUEVO: añade una entrada SUCCESS al historial de forma segura (lee, añade, escribe)
 function marcarComoExitoso(uri, createdAt) {
     let history = [];
     if (fs.existsSync(HISTORY_FILE)) {
@@ -48,32 +47,17 @@ function marcarComoExitoso(uri, createdAt) {
 
     const browser = await puppeteer.launch({
         headless: 'new',
+        userDataDir: PROFILE_DIR, // NUEVO: reutiliza sesión guardada, sin cookies sueltas
         args: ['--no-sandbox', '--disable-setuid-sandbox', '--window-size=1280,800']
     });
 
     const page = await browser.newPage();
     await page.setViewport({ width: 1280, height: 800 });
 
-    let todosPublicadosOk = true; // NUEVO: para decidir si limpiamos thread.json al final
+    let todosPublicadosOk = true;
 
     try {
-        const connectSid = process.env.SUBSTACK_CONNECT_SID;
-        const cfClearance = process.env.SUBSTACK_CF_CLEARANCE;
-        const cfBm = process.env.SUBSTACK_CF_BM;
-
-        if (!connectSid || !cfClearance || !cfBm) {
-            console.error("❌ Error: Faltan variables en el .env (SUBSTACK_CONNECT_SID, SUBSTACK_CF_CLEARANCE, SUBSTACK_CF_BM)");
-            await browser.close();
-            process.exit(1);
-        }
-
-        await page.setCookie(
-            { name: 'substack.sid', value: connectSid, domain: '.substack.com', path: '/', httpOnly: true, secure: true },
-            { name: 'cf_clearance', value: cfClearance, domain: '.substack.com', path: '/', httpOnly: true, secure: true },
-            { name: '__cf_bm', value: cfBm, domain: '.substack.com', path: '/', httpOnly: true, secure: true }
-        );
-
-        console.log("🍪 Cookies inyectadas. Abriendo Substack Notes...");
+        console.log("🔐 Reutilizando sesión guardada. Abriendo Substack Notes...");
         await page.goto('https://substack.com/notes', { waitUntil: 'networkidle2' });
         await sleep(5000);
 
@@ -83,7 +67,17 @@ function marcarComoExitoso(uri, createdAt) {
 
             console.log("🔍 Abriendo el editor...");
             const composerSelector = 'div.inlineComposer-v8PLSi';
-            await page.waitForSelector(composerSelector, { visible: true, timeout: 5000 });
+
+            // NUEVO: si esto falla, la sesión guardada probablemente ya no vale
+            try {
+                await page.waitForSelector(composerSelector, { visible: true, timeout: 8000 });
+            } catch (e) {
+                console.error("❌ No se encontró el editor. Probablemente la sesión guardada ha caducado o Substack pide verificación.");
+                console.error("   Vuelve a ejecutar setup_login.mjs en local y sube 'chrome_profile' actualizada al servidor.");
+                todosPublicadosOk = false;
+                break; // NUEVO: cortamos el hilo aquí, no seguimos intentando eslabones a ciegas
+            }
+
             await page.click(composerSelector);
             await sleep(1500);
 
@@ -155,10 +149,10 @@ function marcarComoExitoso(uri, createdAt) {
             const publishResponse = await publishResponsePromise;
             if (publishResponse && publishResponse.ok()) {
                 console.log(`🎉 Eslabón ${i + 1} publicado correctamente.`);
-                marcarComoExitoso(postData.uri, postData.createdAt); // NUEVO
+                marcarComoExitoso(postData.uri, postData.createdAt);
             } else {
                 console.log(`⚠️ Eslabón ${i + 1} enviado, revisa visualmente.`);
-                todosPublicadosOk = false; // NUEVO: no confirmado, no lo damos por bueno
+                todosPublicadosOk = false;
             }
 
             if (i < threadPosts.length - 1) {
@@ -167,12 +161,12 @@ function marcarComoExitoso(uri, createdAt) {
             }
         }
 
-        console.log("\n🏁 ¡Hilo completo publicado con éxito en Substack!");
-
-        // NUEVO: si todo se confirmó, thread.json ya no hace falta (igual que hace 2_publicar_substack.mjs con post.json)
         if (todosPublicadosOk) {
+            console.log("\n🏁 ¡Hilo completo publicado con éxito en Substack!");
             const threadJsonPath = path.join(__dirname, 'thread.json');
             if (fs.existsSync(threadJsonPath)) fs.unlinkSync(threadJsonPath);
+        } else {
+            console.log("\n⚠️ El hilo no se completó del todo. thread.json se conserva para revisar antes de reintentar."); // NUEVO
         }
 
         await sleep(5000);

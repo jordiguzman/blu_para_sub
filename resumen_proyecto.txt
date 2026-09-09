@@ -101,6 +101,19 @@ Enriquecedor de publicaciones Bandcamp.
   mediaUrls, evitando duplicados.
 - Reescribe el JSON solo cuando hubo cambios.
 
+setup_login.mjs
+---------------
+Utilidad de configuracion inicial para crear un perfil autenticado de Substack.
+
+- Debe ejecutarse manualmente una sola vez en local.
+- Abre Chromium con ventana visible y guarda los datos en chrome_profile/.
+- Navega a https://substack.com/sign-in para que el usuario inicie sesion.
+- Mantiene la ventana abierta durante tres minutos para completar el login.
+- Cierra el navegador y deja el perfil preparado para reutilizarlo en el
+  servidor.
+- Usa Puppeteer con el plugin stealth, pero no lee ni modifica los JSON de
+  publicaciones.
+
 ARCHIVOS JSON
 =============
 
@@ -178,6 +191,29 @@ Copia de seguridad con extension .bak.
 - No participa automaticamente en el flujo porque los scripts buscan
   post.json, no post_real.json.bak.
 
+JSON DE chrome_profile/
+=======================
+
+La carpeta chrome_profile/ es un perfil generado por Chromium para conservar
+la sesion de Substack creada por setup_login.mjs. Sus JSON no forman parte del
+modelo de datos de la aplicacion:
+
+- CertificateRevocation/10767/manifest.json: manifiesto de un componente
+  interno de Chromium relacionado con revocacion de certificados.
+- CertificateRevocation/10767/_metadata/verified_contents.json: hashes y firmas
+  que verifican los archivos del componente anterior.
+- component_crx_cache/metadata.json: mapa de hashes de componentes CRX en la
+  cache del navegador.
+- extensions_crx_cache/metadata.json: metadatos de la cache de extensiones CRX;
+  actualmente no contiene entradas.
+- Subresource Filter/Unindexed Rules/9.71.0/manifest.json: manifiesto de las
+  reglas internas de filtrado de recursos del navegador.
+- Subresource Filter/Unindexed Rules/9.71.0/_metadata/verified_contents.json:
+  hashes y firmas de verificacion de esas reglas.
+
+Estos archivos se regeneran o actualizan con Chromium y no deben editarse
+manualmente.
+
 ARCHIVOS JSON TEMPORALES ESPERADOS
 ==================================
 
@@ -196,7 +232,9 @@ CONFIGURACION Y EXCLUSIONES
 - temp_media/ almacena temporalmente imagenes descargadas y se limpia despues
   de publicar un post individual.
 - node_modules/ y vendor/ son dependencias instaladas y quedan fuera del
-  resumen detallado, tal como se solicito.
+  resumen detallado, tal como se solicito. Los JSON de chrome_profile/ sí se
+  han incluido porque son archivos del proyecto y no pertenecen a esas dos
+  carpetas excluidas.
 - index.php, publish_to_substack.php y feed.xml existen en el proyecto, pero
   no se detallan porque la solicitud se limita a scripts JS/MJS y JSON.
 
