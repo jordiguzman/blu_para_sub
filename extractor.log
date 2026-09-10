@@ -1,0 +1,467 @@
+◇ injected env (5) from Publicaciones-BSK/blu_para_sub/config/.env // tip: ⌘ override existing { override: true }
+🚀 [EXTRACTOR BLUESKY] Conectando...
+🌟 [BASELINE] Arranque en frío detectado. Registrando historial inicial...
+✅ Historial inicial establecido con 26 elementos.
+◇ injected env (5) from Publicaciones-BSK/blu_para_sub/config/.env // tip: ⌘ multiple files { path: ['.env.local', '.env'] }
+🚀 [EXTRACTOR BLUESKY] Conectando...
+✅ Todo al día. No hay posts pendientes.
+◇ injected env (5) from Publicaciones-BSK/blu_para_sub/config/.env // tip: ◈ encrypted .env [www.dotenvx.com]
+🚀 [EXTRACTOR BLUESKY] Conectando...
+✅ Todo al día. No hay posts pendientes.
+◇ injected env (5) from Publicaciones-BSK/blu_para_sub/config/.env // tip: ⌁ auth for agents [www.vestauth.com]
+🚀 [EXTRACTOR BLUESKY] Conectando...
+✅ Todo al día. No hay posts pendientes.
+◇ injected env (5) from Publicaciones-BSK/blu_para_sub/config/.env // tip: ◈ secrets for agents [www.dotenvx.com]
+🚀 [EXTRACTOR BLUESKY] Conectando...
+✅ Todo al día. No hay posts pendientes.
+◇ injected env (5) from Publicaciones-BSK/blu_para_sub/config/.env // tip: ⌘ enable debugging { debug: true }
+🚀 [EXTRACTOR BLUESKY] Conectando...
+✅ Todo al día. No hay posts pendientes.
+◇ injected env (5) from Publicaciones-BSK/blu_para_sub/config/.env // tip: ⌁ auth for agents [www.vestauth.com]
+🚀 [EXTRACTOR BLUESKY] Conectando...
+✅ Todo al día. No hay posts pendientes.
+◇ injected env (5) from Publicaciones-BSK/blu_para_sub/config/.env // tip: ⌘ custom filepath { path: '/custom/path/.env' }
+🚀 [EXTRACTOR BLUESKY] Conectando...
+✅ Todo al día. No hay posts pendientes.
+◇ injected env (5) from Publicaciones-BSK/blu_para_sub/config/.env // tip: ⌘ multiple files { path: ['.env.local', '.env'] }
+🚀 [EXTRACTOR BLUESKY] Conectando...
+✅ Todo al día. No hay posts pendientes.
+◇ injected env (5) from Publicaciones-BSK/blu_para_sub/config/.env // tip: ◈ encrypted .env [www.dotenvx.com]
+🚀 [EXTRACTOR BLUESKY] Conectando...
+📝 Procesando post seleccionado: "Buenos días!
+
+#music #RobertFripp..." (rkey: 3muykjsafcb27)
+✅ Contrato post.json generado correctamente para el post 3muykjsafcb27
+🚀 [EXTRACTOR] Lanzando el script de publicación...
+◇ injected env (0) from config/.env // tip: ⌘ override existing { override: true }
+🚀 [PUBLICADOR] Iniciando navegador...
+🍪 Cookies inyectadas. Abriendo Substack Notes...
+⏳ Esperando 5 segundos a que cargue la interfaz por completo...
+🔍 Abriendo el editor...
+🖱️ ¡Editor abierto!
+✍️ Leyendo post.json...
+📝 Asegurando foco y escribiendo texto en el editor...
+🔍 Buscando el botón 'Post'...
+🖱️ Botón 'Post' localizado y habilitado. Haciendo clic...
+🎉 Confirmado por red: la nota se publicó correctamente (HTTP 200)
+✨ [HISTORIAL] Post registrado como SUCCESS en history.json
+🛑 Dejando el navegador abierto 10 segundos para verificar el resultado.
+🧹 Carpeta temp_media limpiada correctamente.
+◇ injected env (5) from Publicaciones-BSK/blu_para_sub/config/.env // tip: ◈ encrypted .env [www.dotenvx.com]
+🚀 [EXTRACTOR BLUESKY] Conectando...
+📝 Procesando post seleccionado: "Buenos días!
+
+#music #RobertFripp..." (rkey: 3muykjsafcb27)
+✅ Contrato post.json generado correctamente para el post 3muykjsafcb27
+🚀 [EXTRACTOR] Lanzando el script de publicación...
+◇ injected env (0) from config/.env // tip: ⌘ override existing { override: true }
+ℹ️ No se encuentra el archivo post.json. No hay nada pendiente de publicar.
+◇ injected env (5) from Publicaciones-BSK/blu_para_sub/config/.env // tip: ⌁ auth for agents [www.vestauth.com]
+🚀 [EXTRACTOR BLUESKY] Conectando...
+📝 Procesando post seleccionado: "Buenos días!
+
+#music #RobertFripp..." (rkey: 3muykjsafcb27)
+✅ Contrato post.json generado correctamente para el post 3muykjsafcb27
+🚀 [EXTRACTOR] Lanzando el script de publicación...
+◇ injected env (0) from config/.env // tip: ⌘ enable debugging { debug: true }
+ℹ️ No se encuentra el archivo post.json. No hay nada pendiente de publicar.
+◇ injected env (5) from Publicaciones-BSK/blu_para_sub/config/.env // tip: ⌘ enable debugging { debug: true }
+🚀 [EXTRACTOR BLUESKY] Conectando...
+📝 Procesando post seleccionado: "Buenos días!
+
+#music #RobertFripp..." (rkey: 3muykjsafcb27)
+✅ Contrato post.json generado correctamente para el post 3muykjsafcb27
+🚀 [EXTRACTOR] Lanzando el script de publicación...
+◇ injected env (0) from config/.env // tip: ⌘ multiple files { path: ['.env.local', '.env'] }
+ℹ️ No se encuentra el archivo post.json. No hay nada pendiente de publicar.
+◇ injected env (5) from Publicaciones-BSK/blu_para_sub/config/.env // tip: ◈ secrets for agents [www.dotenvx.com]
+🚀 [EXTRACTOR BLUESKY] Conectando...
+📝 Procesando post seleccionado: "Buenos días!
+
+#music #RobertFripp..." (rkey: 3muykjsafcb27)
+✅ Contrato post.json generado correctamente para el post 3muykjsafcb27
+🚀 [EXTRACTOR] Lanzando el script de publicación...
+◇ injected env (0) from config/.env // tip: ⌁ auth for agents [www.vestauth.com]
+ℹ️ No se encuentra el archivo post.json. No hay nada pendiente de publicar.
+◇ injected env (5) from Publicaciones-BSK/blu_para_sub/config/.env // tip: ◈ encrypted .env [www.dotenvx.com]
+🚀 [EXTRACTOR BLUESKY] Conectando...
+📝 Procesando post seleccionado: "Buenos días!
+
+#music #RobertFripp..." (rkey: 3muykjsafcb27)
+✅ Contrato post.json generado correctamente para el post 3muykjsafcb27
+🚀 [EXTRACTOR] Lanzando el script de publicación...
+◇ injected env (0) from config/.env // tip: ⌘ multiple files { path: ['.env.local', '.env'] }
+ℹ️ No se encuentra el archivo post.json. No hay nada pendiente de publicar.
+◇ injected env (5) from Publicaciones-BSK/blu_para_sub/config/.env // tip: ⌘ custom filepath { path: '/custom/path/.env' }
+🚀 [EXTRACTOR BLUESKY] Conectando...
+📝 Procesando post seleccionado: "Buenos días!
+
+#music #RobertFripp..." (rkey: 3muykjsafcb27)
+✅ Contrato post.json generado correctamente para el post 3muykjsafcb27
+🚀 [EXTRACTOR] Lanzando el script de publicación...
+◇ injected env (0) from config/.env // tip: ⌘ suppress logs { quiet: true }
+ℹ️ No se encuentra el archivo post.json. No hay nada pendiente de publicar.
+◇ injected env (5) from Publicaciones-BSK/blu_para_sub/config/.env // tip: ⌘ suppress logs { quiet: true }
+🚀 [EXTRACTOR BLUESKY] Conectando...
+📝 Procesando post seleccionado: "Buenos días!
+
+#music #RobertFripp..." (rkey: 3muykjsafcb27)
+✅ Contrato post.json generado correctamente para el post 3muykjsafcb27
+🚀 [EXTRACTOR] Lanzando el script de publicación...
+◇ injected env (0) from config/.env // tip: ⌁ auth for agents [www.vestauth.com]
+ℹ️ No se encuentra el archivo post.json. No hay nada pendiente de publicar.
+◇ injected env (5) from Publicaciones-BSK/blu_para_sub/config/.env // tip: ⌘ enable debugging { debug: true }
+🚀 [EXTRACTOR BLUESKY] Conectando...
+📝 Procesando post seleccionado: "Buenos días!
+
+#music #RobertFripp..." (rkey: 3muykjsafcb27)
+✅ Contrato post.json generado correctamente para el post 3muykjsafcb27
+🚀 [EXTRACTOR] Lanzando el script de publicación...
+◇ injected env (0) from config/.env // tip: ⌘ suppress logs { quiet: true }
+ℹ️ No se encuentra el archivo post.json. No hay nada pendiente de publicar.
+◇ injected env (5) from Publicaciones-BSK/blu_para_sub/config/.env // tip: ◈ encrypted .env [www.dotenvx.com]
+🚀 [EXTRACTOR BLUESKY] Conectando...
+📝 Procesando post seleccionado: "Buenos días!
+
+#music #RobertFripp..." (rkey: 3muykjsafcb27)
+✅ Contrato post.json generado correctamente para el post 3muykjsafcb27
+🚀 [EXTRACTOR] Lanzando el script de publicación...
+◇ injected env (0) from config/.env // tip: ◈ secrets for agents [www.dotenvx.com]
+ℹ️ No se encuentra el archivo post.json. No hay nada pendiente de publicar.
+◇ injected env (5) from Publicaciones-BSK/blu_para_sub/config/.env // tip: ⌘ suppress logs { quiet: true }
+🚀 [EXTRACTOR BLUESKY] Conectando...
+📝 Procesando post seleccionado: "Buenos días!
+
+#music #RobertFripp..." (rkey: 3muykjsafcb27)
+✅ Contrato post.json generado correctamente para el post 3muykjsafcb27
+🚀 [EXTRACTOR] Lanzando el script de publicación...
+◇ injected env (0) from config/.env // tip: ⌘ enable debugging { debug: true }
+ℹ️ No se encuentra el archivo post.json. No hay nada pendiente de publicar.
+◇ injected env (5) from Publicaciones-BSK/blu_para_sub/config/.env // tip: ⌘ suppress logs { quiet: true }
+🚀 [EXTRACTOR BLUESKY] Conectando...
+📝 Procesando post seleccionado: "Buenos días!
+
+#music #RobertFripp..." (rkey: 3muykjsafcb27)
+✅ Contrato post.json generado correctamente para el post 3muykjsafcb27
+🚀 [EXTRACTOR] Lanzando el script de publicación...
+◇ injected env (0) from config/.env // tip: ⌘ enable debugging { debug: true }
+ℹ️ No se encuentra el archivo post.json. No hay nada pendiente de publicar.
+◇ injected env (5) from Publicaciones-BSK/blu_para_sub/config/.env // tip: ◈ secrets for agents [www.dotenvx.com]
+🚀 [EXTRACTOR BLUESKY] Conectando...
+📝 Procesando post seleccionado: "Buenos días!
+
+#music #RobertFripp..." (rkey: 3muykjsafcb27)
+✅ Contrato post.json generado correctamente para el post 3muykjsafcb27
+🚀 [EXTRACTOR] Lanzando el script de publicación...
+◇ injected env (0) from config/.env // tip: ⌘ override existing { override: true }
+ℹ️ No se encuentra el archivo post.json. No hay nada pendiente de publicar.
+◇ injected env (5) from Publicaciones-BSK/blu_para_sub/config/.env // tip: ◈ secrets for agents [www.dotenvx.com]
+🚀 [EXTRACTOR BLUESKY] Conectando...
+📝 Procesando post seleccionado: "Buenos días!
+
+#music #RobertFripp..." (rkey: 3muykjsafcb27)
+✅ Contrato post.json generado correctamente para el post 3muykjsafcb27
+🚀 [EXTRACTOR] Lanzando el script de publicación...
+◇ injected env (0) from config/.env // tip: ◈ secrets for agents [www.dotenvx.com]
+ℹ️ No se encuentra el archivo post.json. No hay nada pendiente de publicar.
+◇ injected env (5) from Publicaciones-BSK/blu_para_sub/config/.env // tip: ⌘ suppress logs { quiet: true }
+🚀 [EXTRACTOR BLUESKY] Conectando...
+📝 Procesando post seleccionado: "Buenos días!
+
+#music #RobertFripp..." (rkey: 3muykjsafcb27)
+✅ Contrato post.json generado correctamente para el post 3muykjsafcb27
+🚀 [EXTRACTOR] Lanzando el script de publicación...
+◇ injected env (0) from config/.env // tip: ⌘ suppress logs { quiet: true }
+ℹ️ No se encuentra el archivo post.json. No hay nada pendiente de publicar.
+◇ injected env (5) from Publicaciones-BSK/blu_para_sub/config/.env // tip: ⌘ suppress logs { quiet: true }
+🚀 [EXTRACTOR BLUESKY] Conectando...
+📝 Procesando post seleccionado: "Buenos días!
+
+#music #RobertFripp..." (rkey: 3muykjsafcb27)
+✅ Contrato post.json generado correctamente para el post 3muykjsafcb27
+🚀 [EXTRACTOR] Lanzando el script de publicación...
+◇ injected env (0) from config/.env // tip: ⌘ suppress logs { quiet: true }
+ℹ️ No se encuentra el archivo post.json. No hay nada pendiente de publicar.
+◇ injected env (5) from Publicaciones-BSK/blu_para_sub/config/.env // tip: ⌘ multiple files { path: ['.env.local', '.env'] }
+🚀 [EXTRACTOR BLUESKY] Conectando...
+📝 Procesando post seleccionado: "Buenos días!
+
+#music #RobertFripp..." (rkey: 3muykjsafcb27)
+✅ Contrato post.json generado correctamente para el post 3muykjsafcb27
+🚀 [EXTRACTOR] Lanzando el script de publicación...
+◇ injected env (0) from config/.env // tip: ⌁ auth for agents [www.vestauth.com]
+ℹ️ No se encuentra el archivo post.json. No hay nada pendiente de publicar.
+◇ injected env (5) from Publicaciones-BSK/blu_para_sub/config/.env // tip: ⌘ custom filepath { path: '/custom/path/.env' }
+🚀 [EXTRACTOR BLUESKY] Conectando...
+📝 Procesando post seleccionado: "Buenos días!
+
+#music #RobertFripp..." (rkey: 3muykjsafcb27)
+✅ Contrato post.json generado correctamente para el post 3muykjsafcb27
+🚀 [EXTRACTOR] Lanzando el script de publicación...
+◇ injected env (0) from config/.env // tip: ⌁ auth for agents [www.vestauth.com]
+ℹ️ No se encuentra el archivo post.json. No hay nada pendiente de publicar.
+◇ injected env (5) from Publicaciones-BSK/blu_para_sub/config/.env // tip: ◈ secrets for agents [www.dotenvx.com]
+🚀 [EXTRACTOR BLUESKY] Conectando...
+📝 Procesando post seleccionado: "Buenos días!
+
+#music #RobertFripp..." (rkey: 3muykjsafcb27)
+✅ Contrato post.json generado correctamente para el post 3muykjsafcb27
+🚀 [EXTRACTOR] Lanzando el script de publicación...
+◇ injected env (0) from config/.env // tip: ◈ secrets for agents [www.dotenvx.com]
+ℹ️ No se encuentra el archivo post.json. No hay nada pendiente de publicar.
+◇ injected env (5) from Publicaciones-BSK/blu_para_sub/config/.env // tip: ⌘ override existing { override: true }
+🚀 [EXTRACTOR BLUESKY] Conectando...
+📝 Procesando post seleccionado: "Buenos días!
+
+#music #RobertFripp..." (rkey: 3muykjsafcb27)
+✅ Contrato post.json generado correctamente para el post 3muykjsafcb27
+🚀 [EXTRACTOR] Lanzando el script de publicación...
+◇ injected env (0) from config/.env // tip: ⌘ override existing { override: true }
+ℹ️ No se encuentra el archivo post.json. No hay nada pendiente de publicar.
+◇ injected env (5) from Publicaciones-BSK/blu_para_sub/config/.env // tip: ◈ encrypted .env [www.dotenvx.com]
+🚀 [EXTRACTOR BLUESKY] Conectando...
+📝 Procesando post seleccionado: "Buenos días!
+
+#music #RobertFripp..." (rkey: 3muykjsafcb27)
+✅ Contrato post.json generado correctamente para el post 3muykjsafcb27
+🚀 [EXTRACTOR] Lanzando el script de publicación...
+◇ injected env (0) from config/.env // tip: ⌘ enable debugging { debug: true }
+ℹ️ No se encuentra el archivo post.json. No hay nada pendiente de publicar.
+◇ injected env (5) from Publicaciones-BSK/blu_para_sub/config/.env // tip: ⌁ auth for agents [www.vestauth.com]
+🚀 [EXTRACTOR BLUESKY] Conectando...
+📝 Procesando post seleccionado: "Buenos días!
+
+#music #RobertFripp..." (rkey: 3muykjsafcb27)
+✅ Contrato post.json generado correctamente para el post 3muykjsafcb27
+🚀 [EXTRACTOR] Lanzando el script de publicación...
+◇ injected env (0) from config/.env // tip: ⌘ suppress logs { quiet: true }
+ℹ️ No se encuentra el archivo post.json. No hay nada pendiente de publicar.
+◇ injected env (5) from Publicaciones-BSK/blu_para_sub/config/.env // tip: ◈ encrypted .env [www.dotenvx.com]
+🚀 [EXTRACTOR BLUESKY] Conectando...
+📝 Procesando post seleccionado: "Buenos días!
+
+#music #RobertFripp..." (rkey: 3muykjsafcb27)
+✅ Contrato post.json generado correctamente para el post 3muykjsafcb27
+🚀 [EXTRACTOR] Lanzando el script de publicación...
+◇ injected env (0) from config/.env // tip: ⌁ auth for agents [www.vestauth.com]
+ℹ️ No se encuentra el archivo post.json. No hay nada pendiente de publicar.
+◇ injected env (5) from Publicaciones-BSK/blu_para_sub/config/.env // tip: ◈ secrets for agents [www.dotenvx.com]
+🚀 [EXTRACTOR BLUESKY] Conectando...
+📝 Procesando post seleccionado: "Buenos días!
+
+#music #RobertFripp..." (rkey: 3muykjsafcb27)
+✅ Contrato post.json generado correctamente para el post 3muykjsafcb27
+🚀 [EXTRACTOR] Lanzando el script de publicación...
+◇ injected env (0) from config/.env // tip: ⌘ multiple files { path: ['.env.local', '.env'] }
+ℹ️ No se encuentra el archivo post.json. No hay nada pendiente de publicar.
+◇ injected env (5) from Publicaciones-BSK/blu_para_sub/config/.env // tip: ◈ secrets for agents [www.dotenvx.com]
+🚀 [EXTRACTOR BLUESKY] Conectando...
+📝 Procesando post seleccionado: "Buenos días!
+
+#music #RobertFripp..." (rkey: 3muykjsafcb27)
+✅ Contrato post.json generado correctamente para el post 3muykjsafcb27
+🚀 [EXTRACTOR] Lanzando el script de publicación...
+◇ injected env (0) from config/.env // tip: ⌘ multiple files { path: ['.env.local', '.env'] }
+ℹ️ No se encuentra el archivo post.json. No hay nada pendiente de publicar.
+◇ injected env (5) from Publicaciones-BSK/blu_para_sub/config/.env // tip: ⌘ multiple files { path: ['.env.local', '.env'] }
+🚀 [EXTRACTOR BLUESKY] Conectando...
+📝 Procesando post seleccionado: "Buenos días!
+
+#music #RobertFripp..." (rkey: 3muykjsafcb27)
+✅ Contrato post.json generado correctamente para el post 3muykjsafcb27
+🚀 [EXTRACTOR] Lanzando el script de publicación...
+◇ injected env (0) from config/.env // tip: ⌘ override existing { override: true }
+ℹ️ No se encuentra el archivo post.json. No hay nada pendiente de publicar.
+◇ injected env (5) from Publicaciones-BSK/blu_para_sub/config/.env // tip: ⌘ custom filepath { path: '/custom/path/.env' }
+🚀 [EXTRACTOR BLUESKY] Conectando...
+📝 Procesando post seleccionado: "Buenos días!
+
+#music #RobertFripp..." (rkey: 3muykjsafcb27)
+✅ Contrato post.json generado correctamente para el post 3muykjsafcb27
+🚀 [EXTRACTOR] Lanzando el script de publicación...
+◇ injected env (0) from config/.env // tip: ⌘ suppress logs { quiet: true }
+ℹ️ No se encuentra el archivo post.json. No hay nada pendiente de publicar.
+◇ injected env (5) from Publicaciones-BSK/blu_para_sub/config/.env // tip: ⌘ custom filepath { path: '/custom/path/.env' }
+🚀 [EXTRACTOR BLUESKY] Conectando...
+📝 Procesando post seleccionado: "Buenos días!
+
+#music #RobertFripp..." (rkey: 3muykjsafcb27)
+✅ Contrato post.json generado correctamente para el post 3muykjsafcb27
+🚀 [EXTRACTOR] Lanzando el script de publicación...
+◇ injected env (0) from config/.env // tip: ⌘ enable debugging { debug: true }
+ℹ️ No se encuentra el archivo post.json. No hay nada pendiente de publicar.
+◇ injected env (5) from Publicaciones-BSK/blu_para_sub/config/.env // tip: ⌘ override existing { override: true }
+🚀 [EXTRACTOR BLUESKY] Conectando...
+📝 Procesando post seleccionado: "Buenos días!
+
+#music #RobertFripp..." (rkey: 3muykjsafcb27)
+✅ Contrato post.json generado correctamente para el post 3muykjsafcb27
+🚀 [EXTRACTOR] Lanzando el script de publicación...
+◇ injected env (0) from config/.env // tip: ◈ secrets for agents [www.dotenvx.com]
+ℹ️ No se encuentra el archivo post.json. No hay nada pendiente de publicar.
+◇ injected env (5) from Publicaciones-BSK/blu_para_sub/config/.env // tip: ⌘ suppress logs { quiet: true }
+🚀 [EXTRACTOR BLUESKY] Conectando...
+📝 Procesando post seleccionado: "Buenos días!
+
+#music #RobertFripp..." (rkey: 3muykjsafcb27)
+✅ Contrato post.json generado correctamente para el post 3muykjsafcb27
+🚀 [EXTRACTOR] Lanzando el script de publicación...
+◇ injected env (0) from config/.env // tip: ⌘ suppress logs { quiet: true }
+ℹ️ No se encuentra el archivo post.json. No hay nada pendiente de publicar.
+◇ injected env (5) from Publicaciones-BSK/blu_para_sub/config/.env // tip: ⌘ multiple files { path: ['.env.local', '.env'] }
+🚀 [EXTRACTOR BLUESKY] Conectando...
+📝 Procesando post seleccionado: "Buenos días!
+
+#music #RobertFripp..." (rkey: 3muykjsafcb27)
+✅ Contrato post.json generado correctamente para el post 3muykjsafcb27
+🚀 [EXTRACTOR] Lanzando el script de publicación...
+◇ injected env (0) from config/.env // tip: ◈ encrypted .env [www.dotenvx.com]
+ℹ️ No se encuentra el archivo post.json. No hay nada pendiente de publicar.
+◇ injected env (5) from Publicaciones-BSK/blu_para_sub/config/.env // tip: ⌘ enable debugging { debug: true }
+🚀 [EXTRACTOR BLUESKY] Conectando...
+📝 Procesando post seleccionado: "Buenos días!
+
+#music #RobertFripp..." (rkey: 3muykjsafcb27)
+✅ Contrato post.json generado correctamente para el post 3muykjsafcb27
+🚀 [EXTRACTOR] Lanzando el script de publicación...
+◇ injected env (0) from config/.env // tip: ◈ secrets for agents [www.dotenvx.com]
+ℹ️ No se encuentra el archivo post.json. No hay nada pendiente de publicar.
+◇ injected env (5) from Publicaciones-BSK/blu_para_sub/config/.env // tip: ◈ secrets for agents [www.dotenvx.com]
+🚀 [EXTRACTOR BLUESKY] Conectando...
+📝 Procesando post seleccionado: "Buenos días!
+
+#music #RobertFripp..." (rkey: 3muykjsafcb27)
+✅ Contrato post.json generado correctamente para el post 3muykjsafcb27
+🚀 [EXTRACTOR] Lanzando el script de publicación...
+◇ injected env (0) from config/.env // tip: ⌘ suppress logs { quiet: true }
+ℹ️ No se encuentra el archivo post.json. No hay nada pendiente de publicar.
+◇ injected env (5) from Publicaciones-BSK/blu_para_sub/config/.env // tip: ⌘ custom filepath { path: '/custom/path/.env' }
+🚀 [EXTRACTOR BLUESKY] Conectando...
+📝 Procesando post seleccionado: "Buenos días!
+
+#music #RobertFripp..." (rkey: 3muykjsafcb27)
+✅ Contrato post.json generado correctamente para el post 3muykjsafcb27
+🚀 [EXTRACTOR] Lanzando el script de publicación...
+◇ injected env (0) from config/.env // tip: ⌘ override existing { override: true }
+ℹ️ No se encuentra el archivo post.json. No hay nada pendiente de publicar.
+◇ injected env (5) from Publicaciones-BSK/blu_para_sub/config/.env // tip: ⌘ multiple files { path: ['.env.local', '.env'] }
+🚀 [EXTRACTOR BLUESKY] Conectando...
+📝 Procesando post seleccionado: "Buenos días!
+
+#music #RobertFripp..." (rkey: 3muykjsafcb27)
+✅ Contrato post.json generado correctamente para el post 3muykjsafcb27
+🚀 [EXTRACTOR] Lanzando el script de publicación...
+◇ injected env (0) from config/.env // tip: ⌘ override existing { override: true }
+ℹ️ No se encuentra el archivo post.json. No hay nada pendiente de publicar.
+◇ injected env (5) from Publicaciones-BSK/blu_para_sub/config/.env // tip: ⌘ override existing { override: true }
+🚀 [EXTRACTOR BLUESKY] Conectando...
+🧵 Hilo detectado con 3 eslabones pendientes.
+✅ Contrato thread.json generado correctamente con 3 eslabones.
+🚀 [EXTRACTOR] Lanzando el script de publicación de hilos...
+◇ injected env (0) from config/.env // tip: ◈ secrets for agents [www.dotenvx.com]
+🧵 [PUBLICADOR DE HILOS] Iniciando navegador...
+📋 Se han encontrado 3 eslabones para publicar en hilo.
+🍪 Cookies inyectadas. Abriendo Substack Notes...
+
+--- Publicando eslabón [1 de 3] (rkey: 3muxkgmndzk2s) ---
+🔍 Abriendo el editor...
+📝 Escribiendo texto en el editor de forma limpia...
+🖱️ Buscando botón 'Post' para este eslabón...
+⚠️ Eslabón 1 enviado, revisa visualmente.
+⏳ Esperando 5 segundos antes de publicar el siguiente eslabón del hilo...
+
+--- Publicando eslabón [2 de 3] (rkey: 3muxkgtpt3s2s) ---
+🔍 Abriendo el editor...
+📝 Escribiendo texto en el editor de forma limpia...
+🖱️ Buscando botón 'Post' para este eslabón...
+⚠️ Eslabón 2 enviado, revisa visualmente.
+⏳ Esperando 5 segundos antes de publicar el siguiente eslabón del hilo...
+
+--- Publicando eslabón [3 de 3] (rkey: 3muxkgtpv2c2s) ---
+🔍 Abriendo el editor...
+📝 Escribiendo texto en el editor de forma limpia...
+🔗 Añadiendo enlace externo: https://www.science.org/doi/10.1126/sciadv.aee4251?utm_source=badastronomy.beehiiv.com&utm_medium=referral&utm_campaign=saturn-has-a-ginormous-decagon-at-its-south-pole
+🖱️ Buscando botón 'Post' para este eslabón...
+⚠️ Eslabón 3 enviado, revisa visualmente.
+
+🏁 ¡Hilo completo publicado con éxito en Substack!
+◇ injected env (5) from Publicaciones-BSK/blu_para_sub/config/.env // tip: ⌘ suppress logs { quiet: true }
+🚀 [EXTRACTOR BLUESKY] Conectando...
+🧵 Hilo detectado con 3 eslabones pendientes.
+✅ Contrato thread.json generado correctamente con 3 eslabones.
+🚀 [EXTRACTOR] Lanzando el script de publicación de hilos...
+◇ injected env (0) from config/.env // tip: ⌘ custom filepath { path: '/custom/path/.env' }
+🧵 [PUBLICADOR DE HILOS] Iniciando navegador...
+📋 Se han encontrado 3 eslabones para publicar en hilo.
+🍪 Cookies inyectadas. Abriendo Substack Notes...
+
+--- Publicando eslabón [1 de 3] (rkey: 3muxkgmndzk2s) ---
+🔍 Abriendo el editor...
+📝 Escribiendo texto en el editor de forma limpia...
+🖱️ Buscando botón 'Post' para este eslabón...
+⚠️ Eslabón 1 enviado, revisa visualmente.
+⏳ Esperando 5 segundos antes de publicar el siguiente eslabón del hilo...
+
+--- Publicando eslabón [2 de 3] (rkey: 3muxkgtpt3s2s) ---
+🔍 Abriendo el editor...
+📝 Escribiendo texto en el editor de forma limpia...
+🖱️ Buscando botón 'Post' para este eslabón...
+⚠️ Eslabón 2 enviado, revisa visualmente.
+⏳ Esperando 5 segundos antes de publicar el siguiente eslabón del hilo...
+
+--- Publicando eslabón [3 de 3] (rkey: 3muxkgtpv2c2s) ---
+🔍 Abriendo el editor...
+📝 Escribiendo texto en el editor de forma limpia...
+🔗 Añadiendo enlace externo: https://www.science.org/doi/10.1126/sciadv.aee4251?utm_source=badastronomy.beehiiv.com&utm_medium=referral&utm_campaign=saturn-has-a-ginormous-decagon-at-its-south-pole
+🖱️ Buscando botón 'Post' para este eslabón...
+⚠️ Eslabón 3 enviado, revisa visualmente.
+
+🏁 ¡Hilo completo publicado con éxito en Substack!
+◇ injected env (5) from Publicaciones-BSK/blu_para_sub/config/.env // tip: ◈ encrypted .env [www.dotenvx.com]
+🚀 [EXTRACTOR BLUESKY] Conectando...
+🧵 Hilo detectado con 3 eslabones pendientes.
+✅ Contrato thread.json generado correctamente con 3 eslabones.
+🚀 [EXTRACTOR] Lanzando el script de publicación de hilos...
+◇ injected env (0) from config/.env // tip: ⌘ custom filepath { path: '/custom/path/.env' }
+🧵 [PUBLICADOR DE HILOS] Iniciando navegador...
+📋 Se han encontrado 3 eslabones para publicar en hilo.
+🍪 Cookies inyectadas. Abriendo Substack Notes...
+
+--- Publicando eslabón [1 de 3] (rkey: 3muxkgmndzk2s) ---
+🔍 Abriendo el editor...
+📝 Escribiendo texto en el editor de forma limpia...
+🖱️ Buscando botón 'Post' para este eslabón...
+⚠️ Eslabón 1 enviado, revisa visualmente.
+⏳ Esperando 5 segundos antes de publicar el siguiente eslabón del hilo...
+
+--- Publicando eslabón [2 de 3] (rkey: 3muxkgtpt3s2s) ---
+🔍 Abriendo el editor...
+📝 Escribiendo texto en el editor de forma limpia...
+🖱️ Buscando botón 'Post' para este eslabón...
+⚠️ Eslabón 2 enviado, revisa visualmente.
+⏳ Esperando 5 segundos antes de publicar el siguiente eslabón del hilo...
+
+--- Publicando eslabón [3 de 3] (rkey: 3muxkgtpv2c2s) ---
+🔍 Abriendo el editor...
+📝 Escribiendo texto en el editor de forma limpia...
+🔗 Añadiendo enlace externo: https://www.science.org/doi/10.1126/sciadv.aee4251?utm_source=badastronomy.beehiiv.com&utm_medium=referral&utm_campaign=saturn-has-a-ginormous-decagon-at-its-south-pole
+🖱️ Buscando botón 'Post' para este eslabón...
+⚠️ Eslabón 3 enviado, revisa visualmente.
+
+🏁 ¡Hilo completo publicado con éxito en Substack!
+◇ injected env (5) from Publicaciones-BSK/blu_para_sub/config/.env // tip: ⌘ enable debugging { debug: true }
+🚀 [EXTRACTOR BLUESKY] Conectando...
+🧵 Hilo detectado con 3 eslabones pendientes.
+✅ Contrato thread.json generado correctamente con 3 eslabones.
+🚀 [EXTRACTOR] Lanzando el script de publicación de hilos...
+◇ injected env (0) from config/.env // tip: ⌘ suppress logs { quiet: true }
+🧵 [PUBLICADOR DE HILOS] Iniciando navegador...
+📋 Se han encontrado 3 eslabones para publicar en hilo.
+🔐 Reutilizando sesión guardada. Abriendo Substack Notes...
+
+--- Publicando eslabón [1 de 3] (rkey: 3muxkgmndzk2s) ---
+🔍 Abriendo el editor...
+❌ No se encontró el editor. Probablemente la sesión guardada ha caducado o Substack pide verificación.
+   Vuelve a ejecutar setup_login.mjs en local y sube 'chrome_profile' actualizada al servidor.
+
+⚠️ El hilo no se completó del todo. thread.json se conserva para revisar antes de reintentar.

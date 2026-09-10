@@ -12,7 +12,6 @@ const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.join(__dirname, 'config', '.env') });
 
 const HISTORY_FILE = path.join(__dirname, 'history.json');
-const PROFILE_DIR = path.join(__dirname, 'chrome_profile'); // NUEVO
 
 (async () => {
     const jsonPath = path.join(__dirname, 'post.json');
@@ -25,7 +24,6 @@ const PROFILE_DIR = path.join(__dirname, 'chrome_profile'); // NUEVO
 
     const browser = await puppeteer.launch({
         headless: 'new',
-        userDataDir: PROFILE_DIR, // NUEVO: reutiliza sesión guardada, sin cookies sueltas
         args: ['--no-sandbox', '--disable-setuid-sandbox', '--window-size=1280,800']
     });
 
@@ -33,7 +31,23 @@ const PROFILE_DIR = path.join(__dirname, 'chrome_profile'); // NUEVO
     await page.setViewport({ width: 1280, height: 800 });
 
     try {
-        console.log("🔐 Reutilizando sesión guardada. Abriendo Substack Notes...");
+        // CAMBIO: ya no leemos ni exigimos SUBSTACK_CF_BM (caduca a los 30 min, la regenera Cloudflare solo)
+        const connectSid = process.env.SUBSTACK_CONNECT_SID;
+        const cfClearance = process.env.SUBSTACK_CF_CLEARANCE;
+
+        if (!connectSid || !cfClearance) {
+            console.error("❌ Error: Faltan variables en el .env (SUBSTACK_CONNECT_SID, SUBSTACK_CF_CLEARANCE)");
+            await browser.close();
+            process.exit(1);
+        }
+
+        // CAMBIO: solo dos cookies, ya no inyectamos __cf_bm
+        await page.setCookie(
+            { name: 'substack.sid', value: connectSid, domain: '.substack.com', path: '/', httpOnly: true, secure: true },
+            { name: 'cf_clearance', value: cfClearance, domain: '.substack.com', path: '/', httpOnly: true, secure: true }
+        );
+
+        console.log("🍪 Cookies inyectadas (sin __cf_bm). Abriendo Substack Notes...");
         await page.goto('https://substack.com/notes', { waitUntil: 'networkidle2' });
 
         console.log("⏳ Esperando 5 segundos a que cargue la interfaz por completo...");
@@ -41,18 +55,7 @@ const PROFILE_DIR = path.join(__dirname, 'chrome_profile'); // NUEVO
 
         console.log("🔍 Abriendo el editor...");
         const composerSelector = 'div.inlineComposer-v8PLSi';
-
-        // NUEVO: si esto falla, casi seguro que la sesión guardada ya no vale
-        // y hay que repetir el login manual con setup_login.mjs
-        try {
-            await page.waitForSelector(composerSelector, { visible: true, timeout: 8000 });
-        } catch (e) {
-            console.error("❌ No se encontró el editor. Probablemente la sesión guardada ha caducado o Substack pide verificación.");
-            console.error("   Vuelve a ejecutar setup_login.mjs en local y sube 'chrome_profile' actualizada al servidor.");
-            await browser.close();
-            process.exit(1);
-        }
-
+        await page.waitForSelector(composerSelector, { visible: true, timeout: 8000 });
         await page.click(composerSelector);
         console.log("🖱️ ¡Editor abierto!");
 

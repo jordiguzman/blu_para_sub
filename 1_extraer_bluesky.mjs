@@ -16,6 +16,8 @@ const HISTORY_FILE = path.join(__dirname, 'history.json');
 const POST_FILE = path.join(__dirname, 'post.json');
 const THREAD_FILE = path.join(__dirname, 'thread.json');
 const TEMP_MEDIA_DIR = path.join(__dirname, 'temp_media');
+const ATTEMPTS_FILE = path.join(__dirname, 'attempts.json'); // NUEVO
+const MAX_ATTEMPTS = 5; // NUEVO
 
 if (fs.existsSync(LOCK_FILE)) {
     const lockStats = fs.statSync(LOCK_FILE);
@@ -26,6 +28,20 @@ if (fs.existsSync(LOCK_FILE)) {
     }
 }
 fs.writeFileSync(LOCK_FILE, String(process.pid));
+
+// NUEVO: helpers de conteo de intentos fallidos
+function leerIntentos() {
+    if (!fs.existsSync(ATTEMPTS_FILE)) return {};
+    try {
+        return JSON.parse(fs.readFileSync(ATTEMPTS_FILE, 'utf8'));
+    } catch (e) {
+        return {};
+    }
+}
+
+function guardarIntentos(intentos) {
+    fs.writeFileSync(ATTEMPTS_FILE, JSON.stringify(intentos, null, 2), 'utf8');
+}
 
 // Descarga la miniatura de un embed externo (si existe) y devuelve la ruta local o null
 async function descargarThumb(authorDid, thumbRef) {
@@ -92,7 +108,6 @@ async function run() {
         const profile = await agent.getProfile({ actor: process.env.BSKY_HANDLE });
         const myDid = profile.data.did;
 
-        // IMPORTANTE: ahora pedimos también las respuestas, si no, los hilos son invisibles
         const feedResponse = await agent.getAuthorFeed({
             actor: process.env.BSKY_HANDLE,
             filter: 'posts_with_replies',
@@ -111,8 +126,6 @@ async function run() {
             }
         }
 
-        // Arranque en frío: comportamiento igual que antes, pero solo con posts propios raíz
-        // (no queremos que respuestas a terceros contaminen la línea base)
         const ownRootPosts = feedItems
             .map(item => item.post)
             .filter(post => post.author.did === myDid);
@@ -132,38 +145,33 @@ async function run() {
             return;
         }
 
+        // NUEVO: SKIPPED_MANUAL_REVIEW cuenta como "ya hecho" (apartado, no se reintenta)
         const successfulUris = new Set(history.filter(h => h.status === 'SUCCESS').map(h => h.uri));
         const baselineUris = new Set(history.filter(h => h.status === 'INITIAL_BASELINE').map(h => h.uri));
-        const yaHecho = (uri) => successfulUris.has(uri) || baselineUris.has(uri);
+        const skippedUris = new Set(history.filter(h => h.status === 'SKIPPED_MANUAL_REVIEW').map(h => h.uri));
+        const yaHecho = (uri) => successfulUris.has(uri) || baselineUris.has(uri) || skippedUris.has(uri);
 
-        // Agrupar por hilo: descartamos respuestas a otras personas,
-        // y agrupamos las respuestas a uno mismo bajo la raíz del hilo
-        const grupos = new Map(); // rootUri -> [post, post, ...] (solo los que aún NO están hechos)
+        const grupos = new Map();
 
         for (const item of feedItems) {
             const post = item.post;
-            if (post.author.did !== myDid) continue; // no es tuyo, fuera
+            if (post.author.did !== myDid) continue;
 
             const reply = item.reply;
             let rootUri = post.uri;
 
             if (reply) {
                 const parentAuthorDid = reply.parent?.author?.did;
-                if (parentAuthorDid !== myDid) {
-                    // Respondes a otra persona -> se descarta, no es contenido aislado propio
-                    continue;
-                }
+                if (parentAuthorDid !== myDid) continue;
                 rootUri = reply.root?.uri || post.uri;
             }
 
-            if (yaHecho(post.uri)) continue; // esta parte del hilo (o post suelto) ya está publicada
+            if (yaHecho(post.uri)) continue;
 
             if (!grupos.has(rootUri)) grupos.set(rootUri, []);
             grupos.get(rootUri).push(post);
         }
 
-        // Convertir a lista de "unidades de trabajo", ordenar cada una internamente por fecha,
-        // y elegir la unidad pendiente más antigua (por su mensaje más antiguo)
         const unidades = Array.from(grupos.values())
             .filter(posts => posts.length > 0)
             .map(posts => posts.sort((a, b) => new Date(a.record.createdAt) - new Date(b.record.createdAt)));
@@ -178,8 +186,31 @@ async function run() {
         }
 
         const unidadElegida = unidades[0];
+        const claveUnidad = unidadElegida[0].uri; // NUEVO: identifica la unidad para contar intentos
 
-        // Preparar temp_media (limpio antes de descargar lo nuevo)
+        // NUEVO: control de intentos fallidos repetidos
+        let intentos = leerIntentos();
+        intentos[claveUnidad] = (intentos[claveUnidad] || 0) + 1;
+
+        if (intentos[claveUnidad] > MAX_ATTEMPTS) {
+            console.log(`🚫 "${claveUnidad}" ha fallado ${MAX_ATTEMPTS} veces seguidas. Se aparta para revisión manual, no se reintenta más.`);
+
+            for (const post of unidadElegida) {
+                history.push({
+                    uri: post.uri,
+                    status: 'SKIPPED_MANUAL_REVIEW',
+                    createdAt: post.record.createdAt,
+                    timestamp: new Date().toISOString()
+                });
+            }
+            fs.writeFileSync(HISTORY_FILE, JSON.stringify(history, null, 2), 'utf8');
+
+            delete intentos[claveUnidad];
+            guardarIntentos(intentos);
+            return;
+        }
+        guardarIntentos(intentos);
+
         if (!fs.existsSync(TEMP_MEDIA_DIR)) {
             fs.mkdirSync(TEMP_MEDIA_DIR, { recursive: true });
         } else {
@@ -187,7 +218,6 @@ async function run() {
         }
 
         if (unidadElegida.length === 1) {
-            // ---- CASO: post suelto (comportamiento igual que hasta ahora) ----
             const post = unidadElegida[0];
             const datos = await extraerDatosPost(post);
 
@@ -220,7 +250,6 @@ async function run() {
             }
 
         } else {
-            // ---- CASO: hilo con varios eslabones pendientes ----
             console.log(`🧵 Hilo detectado con ${unidadElegida.length} eslabones pendientes.`);
 
             const threadContract = [];
@@ -246,7 +275,7 @@ async function run() {
 
             console.log("🚀 [EXTRACTOR] Lanzando el script de publicación de hilos...");
             try {
-                execSync('node 3_publicar_hilo.js', { stdio: 'inherit', cwd: __dirname });
+                execSync('node 3_publicar_hilo.cjs', { stdio: 'inherit', cwd: __dirname });
             } catch (pubError) {
                 console.error(`❌ [PUBLICADOR DE HILOS] Error al ejecutar el script de publicación: ${pubError.message}`);
             }

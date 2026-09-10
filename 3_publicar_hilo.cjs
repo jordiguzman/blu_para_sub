@@ -8,7 +8,6 @@ require('dotenv').config({ path: path.join(__dirname, 'config', '.env') });
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 const HISTORY_FILE = path.join(__dirname, 'history.json');
-const PROFILE_DIR = path.join(__dirname, 'chrome_profile'); // NUEVO: mismo perfil que usa 2_publicar_substack.mjs
 
 function marcarComoExitoso(uri, createdAt) {
     let history = [];
@@ -47,7 +46,6 @@ function marcarComoExitoso(uri, createdAt) {
 
     const browser = await puppeteer.launch({
         headless: 'new',
-        userDataDir: PROFILE_DIR, // NUEVO: reutiliza sesión guardada, sin cookies sueltas
         args: ['--no-sandbox', '--disable-setuid-sandbox', '--window-size=1280,800']
     });
 
@@ -57,7 +55,23 @@ function marcarComoExitoso(uri, createdAt) {
     let todosPublicadosOk = true;
 
     try {
-        console.log("🔐 Reutilizando sesión guardada. Abriendo Substack Notes...");
+        // CAMBIO: ya no leemos ni exigimos SUBSTACK_CF_BM
+        const connectSid = process.env.SUBSTACK_CONNECT_SID;
+        const cfClearance = process.env.SUBSTACK_CF_CLEARANCE;
+
+        if (!connectSid || !cfClearance) {
+            console.error("❌ Error: Faltan variables en el .env (SUBSTACK_CONNECT_SID, SUBSTACK_CF_CLEARANCE)");
+            await browser.close();
+            process.exit(1);
+        }
+
+        // CAMBIO: solo dos cookies, ya no inyectamos __cf_bm
+        await page.setCookie(
+            { name: 'substack.sid', value: connectSid, domain: '.substack.com', path: '/', httpOnly: true, secure: true },
+            { name: 'cf_clearance', value: cfClearance, domain: '.substack.com', path: '/', httpOnly: true, secure: true }
+        );
+
+        console.log("🍪 Cookies inyectadas (sin __cf_bm). Abriendo Substack Notes...");
         await page.goto('https://substack.com/notes', { waitUntil: 'networkidle2' });
         await sleep(5000);
 
@@ -68,14 +82,12 @@ function marcarComoExitoso(uri, createdAt) {
             console.log("🔍 Abriendo el editor...");
             const composerSelector = 'div.inlineComposer-v8PLSi';
 
-            // NUEVO: si esto falla, la sesión guardada probablemente ya no vale
             try {
                 await page.waitForSelector(composerSelector, { visible: true, timeout: 8000 });
             } catch (e) {
-                console.error("❌ No se encontró el editor. Probablemente la sesión guardada ha caducado o Substack pide verificación.");
-                console.error("   Vuelve a ejecutar setup_login.mjs en local y sube 'chrome_profile' actualizada al servidor.");
+                console.error("❌ No se encontró el editor. Revisa si las cookies (SUBSTACK_CONNECT_SID / SUBSTACK_CF_CLEARANCE) siguen siendo válidas.");
                 todosPublicadosOk = false;
-                break; // NUEVO: cortamos el hilo aquí, no seguimos intentando eslabones a ciegas
+                break; // cortamos el hilo aquí, no seguimos a ciegas
             }
 
             await page.click(composerSelector);
@@ -166,7 +178,7 @@ function marcarComoExitoso(uri, createdAt) {
             const threadJsonPath = path.join(__dirname, 'thread.json');
             if (fs.existsSync(threadJsonPath)) fs.unlinkSync(threadJsonPath);
         } else {
-            console.log("\n⚠️ El hilo no se completó del todo. thread.json se conserva para revisar antes de reintentar."); // NUEVO
+            console.log("\n⚠️ El hilo no se completó del todo. thread.json se conserva para revisar antes de reintentar.");
         }
 
         await sleep(5000);
