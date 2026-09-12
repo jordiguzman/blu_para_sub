@@ -16,8 +16,8 @@ const HISTORY_FILE = path.join(__dirname, 'history.json');
 const POST_FILE = path.join(__dirname, 'post.json');
 const THREAD_FILE = path.join(__dirname, 'thread.json');
 const TEMP_MEDIA_DIR = path.join(__dirname, 'temp_media');
-const ATTEMPTS_FILE = path.join(__dirname, 'attempts.json'); // NUEVO
-const MAX_ATTEMPTS = 5; // NUEVO
+const ATTEMPTS_FILE = path.join(__dirname, 'attempts.json');
+const MAX_ATTEMPTS = 5;
 
 if (fs.existsSync(LOCK_FILE)) {
     const lockStats = fs.statSync(LOCK_FILE);
@@ -29,7 +29,6 @@ if (fs.existsSync(LOCK_FILE)) {
 }
 fs.writeFileSync(LOCK_FILE, String(process.pid));
 
-// NUEVO: helpers de conteo de intentos fallidos
 function leerIntentos() {
     if (!fs.existsSync(ATTEMPTS_FILE)) return {};
     try {
@@ -43,7 +42,7 @@ function guardarIntentos(intentos) {
     fs.writeFileSync(ATTEMPTS_FILE, JSON.stringify(intentos, null, 2), 'utf8');
 }
 
-// Descarga la miniatura de un embed externo (si existe) y devuelve la ruta local o null
+// Descarga la miniatura de un embed externo (link-card) y devuelve la ruta local o null
 async function descargarThumb(authorDid, thumbRef) {
     if (!thumbRef) return null;
     const thumbUrl = `https://cdn.bsky.social/img/feed_thumbnail/plain/${authorDid}/${thumbRef}`;
@@ -61,12 +60,33 @@ async function descargarThumb(authorDid, thumbRef) {
     return null;
 }
 
+// NUEVO: descarga una imagen nativa adjunta directamente al post, en su calidad real (no miniatura)
+async function descargarImagenNativa(agent, authorDid, blobRef, rkey, indice) {
+    if (!blobRef) return null;
+    try {
+        const blobRes = await agent.com.atproto.sync.getBlob({
+            did: authorDid,
+            cid: blobRef
+        });
+        if (blobRes?.data) {
+            const buffer = Buffer.from(blobRes.data);
+            const localPath = path.join(TEMP_MEDIA_DIR, `img_${rkey}_${indice}.jpg`);
+            fs.writeFileSync(localPath, buffer);
+            return localPath;
+        }
+    } catch (err) {
+        console.log(`⚠️ Error descargando imagen nativa ${indice}: ${err.message}`);
+    }
+    return null;
+}
+
 // Extrae los datos comunes de un post individual (texto, embed, media descargada)
-async function extraerDatosPost(post) {
+async function extraerDatosPost(post, agent, myDid) {
     const record = post.record;
     let mediaUrls = [];
     let externalLink = null;
     const embedType = record.embed?.$type || null;
+    const rkey = post.uri.split('/').pop();
 
     if (embedType === 'app.bsky.embed.external' && record.embed.external) {
         const ext = record.embed.external;
@@ -84,9 +104,19 @@ async function extraerDatosPost(post) {
         };
     }
 
+    // NUEVO: imágenes adjuntadas directamente al post (arte manual, APOD, Cassini, HiRISE, etc.)
+    if (embedType === 'app.bsky.embed.images' && record.embed.images?.length > 0) {
+        for (let i = 0; i < record.embed.images.length; i++) {
+            const img = record.embed.images[i];
+            const blobRef = img.image?.ref?.$link || img.image?.ref;
+            const localPath = await descargarImagenNativa(agent, myDid, blobRef, rkey, i);
+            if (localPath) mediaUrls.push(localPath);
+        }
+    }
+
     return {
         uri: post.uri,
-        rkey: post.uri.split('/').pop(),
+        rkey,
         createdAt: record.createdAt,
         text: record.text || '',
         embedType,
@@ -145,7 +175,6 @@ async function run() {
             return;
         }
 
-        // NUEVO: SKIPPED_MANUAL_REVIEW cuenta como "ya hecho" (apartado, no se reintenta)
         const successfulUris = new Set(history.filter(h => h.status === 'SUCCESS').map(h => h.uri));
         const baselineUris = new Set(history.filter(h => h.status === 'INITIAL_BASELINE').map(h => h.uri));
         const skippedUris = new Set(history.filter(h => h.status === 'SKIPPED_MANUAL_REVIEW').map(h => h.uri));
@@ -186,9 +215,8 @@ async function run() {
         }
 
         const unidadElegida = unidades[0];
-        const claveUnidad = unidadElegida[0].uri; // NUEVO: identifica la unidad para contar intentos
+        const claveUnidad = unidadElegida[0].uri;
 
-        // NUEVO: control de intentos fallidos repetidos
         let intentos = leerIntentos();
         intentos[claveUnidad] = (intentos[claveUnidad] || 0) + 1;
 
@@ -219,11 +247,13 @@ async function run() {
 
         if (unidadElegida.length === 1) {
             const post = unidadElegida[0];
-            const datos = await extraerDatosPost(post);
+            const datos = await extraerDatosPost(post, agent, myDid);
 
             let postType = 'text';
             if (datos.embedType === 'app.bsky.embed.external' && datos.externalLink) {
                 postType = datos.externalLink.uri.toLowerCase().includes('bandcamp.com') ? 'bandcamp' : 'link';
+            } else if (datos.embedType === 'app.bsky.embed.images' && datos.mediaUrls.length > 0) {
+                postType = 'media'; // NUEVO
             }
 
             console.log(`📝 Procesando post seleccionado: "${datos.text.substring(0, 40)}..." (rkey: ${datos.rkey})`);
@@ -254,7 +284,7 @@ async function run() {
 
             const threadContract = [];
             for (const post of unidadElegida) {
-                const datos = await extraerDatosPost(post);
+                const datos = await extraerDatosPost(post, agent, myDid);
                 threadContract.push({
                     uri: datos.uri,
                     rkey: datos.rkey,

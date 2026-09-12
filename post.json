@@ -1,0 +1,14 @@
+{
+  "uri": "at://did:plc:7rxajtbhdi4fpelalnmu35it/app.bsky.feed.post/3mvbuvhjihs2r",
+  "rkey": "3mvbuvhjihs2r",
+  "createdAt": "2026-09-12T00:59:33.956Z",
+  "type": "bandcamp",
+  "text": "Test 2. Texto y BandCamp",
+  "mediaUrls": [],
+  "externalLink": {
+    "uri": "https://mentat1.bandcamp.com/track/the-path-of-the-moon",
+    "title": "The Path of the Moon, by Mentat",
+    "description": "from the album Pleased To Meet You",
+    "thumbUrl": "https://cdn.bsky.social/img/feed_thumbnail/plain/did:plc:7rxajtbhdi4fpelalnmu35it/bafkreicr4aob6hlt2ypo7wt62zwzzxbvzgbv7fgdoxlbx5mavf5wnzn7le"
+  }
+}

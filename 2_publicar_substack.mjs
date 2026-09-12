@@ -14,6 +14,11 @@ dotenv.config({ path: path.join(__dirname, 'config', '.env') });
 const HISTORY_FILE = path.join(__dirname, 'history.json');
 
 (async () => {
+
+    // ============================================================
+    // SECCIÓN 1: COMPROBACIÓN INICIAL
+    // Si no hay post.json, no hay nada que publicar. Se para aquí.
+    // ============================================================
     const jsonPath = path.join(__dirname, 'post.json');
     if (!fs.existsSync(jsonPath)) {
         console.log("ℹ️ No se encuentra el archivo post.json. No hay nada pendiente de publicar.");
@@ -31,7 +36,10 @@ const HISTORY_FILE = path.join(__dirname, 'history.json');
     await page.setViewport({ width: 1280, height: 800 });
 
     try {
-        // CAMBIO: ya no leemos ni exigimos SUBSTACK_CF_BM (caduca a los 30 min, la regenera Cloudflare solo)
+
+        // ============================================================
+        // SECCIÓN 2: LOGIN EN SUBSTACK (cookies de sesión)
+        // ============================================================
         const connectSid = process.env.SUBSTACK_CONNECT_SID;
         const cfClearance = process.env.SUBSTACK_CF_CLEARANCE;
 
@@ -41,7 +49,6 @@ const HISTORY_FILE = path.join(__dirname, 'history.json');
             process.exit(1);
         }
 
-        // CAMBIO: solo dos cookies, ya no inyectamos __cf_bm
         await page.setCookie(
             { name: 'substack.sid', value: connectSid, domain: '.substack.com', path: '/', httpOnly: true, secure: true },
             { name: 'cf_clearance', value: cfClearance, domain: '.substack.com', path: '/', httpOnly: true, secure: true }
@@ -53,6 +60,9 @@ const HISTORY_FILE = path.join(__dirname, 'history.json');
         console.log("⏳ Esperando 5 segundos a que cargue la interfaz por completo...");
         await new Promise(r => setTimeout(r, 5000));
 
+        // ============================================================
+        // SECCIÓN 3: ABRIR EL EDITOR DE SUBSTACK
+        // ============================================================
         console.log("🔍 Abriendo el editor...");
         const composerSelector = 'div.inlineComposer-v8PLSi';
         await page.waitForSelector(composerSelector, { visible: true, timeout: 8000 });
@@ -61,6 +71,11 @@ const HISTORY_FILE = path.join(__dirname, 'history.json');
 
         await new Promise(r => setTimeout(r, 1500));
 
+        // ============================================================
+        // SECCIÓN 4: LEER EL CONTRATO (post.json) Y DECIDIR QUÉ HACER
+        // Aquí se decide: ¿tiene imágenes? ¿el enlace va suelto en el
+        // texto o se separa para añadirlo al final?
+        // ============================================================
         console.log("✍️ Leyendo post.json...");
         const postData = JSON.parse(fs.readFileSync(jsonPath, 'utf-8'));
 
@@ -68,11 +83,16 @@ const HISTORY_FILE = path.join(__dirname, 'history.json');
         let textoFinal = postData.text.trim();
         let enlaceParaAlFinal = null;
 
+        // Caso actual: posts de tipo "link" CON imagen -> se saca el enlace
+        // del texto para añadirlo aparte, al final, después de subir la foto.
         if (tieneImagenes && postData.type === 'link' && postData.externalLink && postData.externalLink.uri) {
             enlaceParaAlFinal = postData.externalLink.uri;
             textoFinal = textoFinal.replace(enlaceParaAlFinal, '').trim();
         }
 
+        // ============================================================
+        // SECCIÓN 5: ESCRIBIR EL TEXTO EN EL EDITOR
+        // ============================================================
         console.log("📝 Asegurando foco y escribiendo texto en el editor...");
         const editorHandle = await page.$('div.inlineComposer-v8PLSi [contenteditable="true"]');
         if (editorHandle) {
@@ -82,6 +102,11 @@ const HISTORY_FILE = path.join(__dirname, 'history.json');
         await page.keyboard.type(textoFinal, { delay: 40 });
         await new Promise(r => setTimeout(r, 2000));
 
+        // ============================================================
+        // SECCIÓN 6: SUBIR IMÁGENES (si el post.json trae mediaUrls)
+        // Esto es lo que ya usan las imágenes nativas (arte, APOD, etc.)
+        // y sería lo que reutilizaría Bandcamp con portada grande.
+        // ============================================================
         if (tieneImagenes) {
             const localImagePaths = postData.mediaUrls.filter(filePath => fs.existsSync(filePath));
 
@@ -113,16 +138,42 @@ const HISTORY_FILE = path.join(__dirname, 'history.json');
             }
         }
 
+        // ============================================================
+        // SECCIÓN 7: AÑADIR EL ENLACE EXTERNO AL TEXTO (si corresponde)
+        //
+        // Aquí es EXACTAMENTE donde iría el cambio de Bandcamp+portada
+        // grande, cuando lo hagamos. Ahora mismo hay dos casos (los dos
+        // "if / else if" de abajo). El cambio futuro añadiría un TERCER
+        // caso en medio de estos dos, sin tocarlos:
+        //
+        //   👉 PUNTO DE INSERCIÓN FUTURA (todavía no añadido) 👈
+        //   "Si es Bandcamp Y tiene imagen (portada grande) -> añadir
+        //    el enlace igualmente, para conservar la tarjeta pequeña
+        //    de Substack A LA VEZ que la foto grande subida arriba."
+        // ============================================================
         if (enlaceParaAlFinal) {
+            // CASO A (ya existe): posts "link" con imagen -> el enlace
+            // se escribe al final, después de la foto.
             console.log(`🔗 Añadiendo enlace externo al final: ${enlaceParaAlFinal}`);
             await page.keyboard.type('\n\n' + enlaceParaAlFinal, { delay: 40 });
             await new Promise(r => setTimeout(r, 4000));
+
+        // <<< AQUÍ, entre este "if" y el "else if" de abajo, iría el nuevo
+        //     bloque para "Bandcamp CON imagen" cuando lo añadamos >>>
+
         } else if (!tieneImagenes && (postData.type === 'bandcamp' || postData.type === 'link') && postData.externalLink && postData.externalLink.uri) {
+            // CASO B (ya existe, es el que se usa siempre hoy para Bandcamp):
+            // no hay imagen -> se añade el enlace suelto, y Substack genera
+            // su tarjetita pequeña automática. Esto es lo que ves ahora
+            // mismo en tus posts de Bandcamp.
             console.log(`🔗 Añadiendo enlace externo (${postData.type}): ${postData.externalLink.uri}`);
             await page.keyboard.type('\n\n' + postData.externalLink.uri, { delay: 40 });
             await new Promise(r => setTimeout(r, 4000));
         }
 
+        // ============================================================
+        // SECCIÓN 8: BUSCAR Y PULSAR EL BOTÓN "POST"
+        // ============================================================
         console.log("🔍 Buscando el botón 'Post'...");
         const postButtonInfo = await page.evaluate(() => {
             const buttons = Array.from(document.querySelectorAll('button'));
@@ -155,6 +206,9 @@ const HISTORY_FILE = path.join(__dirname, 'history.json');
             if (el) el.click();
         });
 
+        // ============================================================
+        // SECCIÓN 9: CONFIRMAR PUBLICACIÓN Y ACTUALIZAR HISTORY.JSON
+        // ============================================================
         const publishResponse = await publishResponsePromise;
         if (publishResponse && publishResponse.ok()) {
             console.log(`🎉 Confirmado por red: la nota se publicó correctamente (HTTP ${publishResponse.status()})`);
@@ -191,6 +245,9 @@ const HISTORY_FILE = path.join(__dirname, 'history.json');
     } catch (error) {
         console.error("❌ Error durante la ejecución:", error);
     } finally {
+        // ============================================================
+        // SECCIÓN 10: LIMPIEZA FINAL (pase lo que pase, éxito o error)
+        // ============================================================
         await browser.close();
         try {
             const tempDir = path.join(__dirname, 'temp_media');
