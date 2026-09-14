@@ -102,24 +102,14 @@ function marcarComoExitoso(uri, createdAt) {
                 textoFinal = textoFinal.replace(enlaceParaAlFinal, '').trim();
             }
 
-            console.log("📝 Escribiendo texto en el editor de forma limpia...");
-            await page.click(composerSelector);
-            await new Promise(r => setTimeout(r, 500));
-
-            await page.evaluate((texto) => {
-                const activeEl = document.activeElement;
-                if (activeEl) {
-                    if (activeEl.isContentEditable) {
-                        activeEl.textContent = texto;
-                    } else if (activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'INPUT') {
-                        activeEl.value = texto;
-                    }
-                    activeEl.dispatchEvent(new Event('input', { bubbles: true }));
-                    activeEl.dispatchEvent(new Event('change', { bubbles: true }));
-                }
-            }, textoFinal);
-
-            await new Promise(r => setTimeout(r, 1500));
+            console.log("📝 Escribiendo texto en el editor (escritura real)...");
+            const editorHandle = await page.$('div.inlineComposer-v8PLSi [contenteditable="true"]');
+            if (editorHandle) {
+                await editorHandle.click();
+            }
+            await new Promise(r => setTimeout(r, 1000));
+            await page.keyboard.type(textoFinal, { delay: 40 });
+            await new Promise(r => setTimeout(r, 2000));
 
             if (tieneImagenes) {
                 const localImagePaths = postData.mediaUrls.filter(filePath => fs.existsSync(filePath));
@@ -144,6 +134,24 @@ function marcarComoExitoso(uri, createdAt) {
                 await page.keyboard.type('\n\n' + postData.externalLink.uri, { delay: 40 });
                 await sleep(3000);
             }
+
+            const postButtonInfo = await page.evaluate(() => {
+            const buttons = Array.from(document.querySelectorAll('button'));
+            const candidatos = buttons.filter(el => el.textContent.trim() === 'Post');
+            if (candidatos.length === 0) return { found: false };
+            const el = candidatos.find(b => b.offsetParent !== null) || candidatos[0];
+            const isDisabled = el.disabled === true
+                || el.getAttribute('aria-disabled') === 'true'
+                || el.classList.contains('disabled');
+            return { found: true, disabled: isDisabled };
+        });
+
+        if (!postButtonInfo.found || postButtonInfo.disabled) {
+            console.log(`⚠️ El botón 'Post' no está disponible para el eslabón ${i + 1}. Abortando el hilo.`);
+            todosPublicadosOk = false;
+            break;
+        }
+
 
             console.log("🖱️ Buscando botón 'Post' para este eslabón...");
             const publishResponsePromise = page.waitForResponse(

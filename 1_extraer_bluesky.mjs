@@ -60,7 +60,7 @@ async function descargarThumb(authorDid, thumbRef) {
     return null;
 }
 
-// NUEVO: descarga una imagen nativa adjunta directamente al post, en su calidad real (no miniatura)
+// Descarga una imagen nativa adjunta directamente al post, en su calidad real (no miniatura)
 async function descargarImagenNativa(agent, authorDid, blobRef, rkey, indice) {
     if (!blobRef) return null;
     try {
@@ -104,7 +104,7 @@ async function extraerDatosPost(post, agent, myDid) {
         };
     }
 
-    // NUEVO: imágenes adjuntadas directamente al post (arte manual, APOD, Cassini, HiRISE, etc.)
+    // Imágenes adjuntadas directamente al post (arte manual, APOD, Cassini, HiRISE, etc.)
     if (embedType === 'app.bsky.embed.images' && record.embed.images?.length > 0) {
         for (let i = 0; i < record.embed.images.length; i++) {
             const img = record.embed.images[i];
@@ -253,7 +253,7 @@ async function run() {
             if (datos.embedType === 'app.bsky.embed.external' && datos.externalLink) {
                 postType = datos.externalLink.uri.toLowerCase().includes('bandcamp.com') ? 'bandcamp' : 'link';
             } else if (datos.embedType === 'app.bsky.embed.images' && datos.mediaUrls.length > 0) {
-                postType = 'media'; // NUEVO
+                postType = 'media';
             }
 
             console.log(`📝 Procesando post seleccionado: "${datos.text.substring(0, 40)}..." (rkey: ${datos.rkey})`);
@@ -271,6 +271,18 @@ async function run() {
             fs.writeFileSync(POST_FILE, JSON.stringify(postContract, null, 2), 'utf8');
             if (fs.existsSync(THREAD_FILE)) fs.unlinkSync(THREAD_FILE);
             console.log(`✅ Contrato post.json generado correctamente para el post ${postContract.rkey}`);
+
+            // NUEVO: si es Bandcamp, intenta enriquecer con la portada grande ANTES de publicar.
+            // Si algo falla aquí, se registra el aviso y se sigue con la miniatura pequeña de siempre —
+            // esto nunca puede impedir que el post se publique.
+            if (postType === 'bandcamp') {
+                console.log("🎵 [EXTRACTOR] Post de Bandcamp detectado. Intentando enriquecer con portada grande...");
+                try {
+                    execSync('node 4_enriquecer_bandcamp.mjs', { stdio: 'inherit', cwd: __dirname });
+                } catch (enriquecerError) {
+                    console.error(`⚠️ [ENRIQUECIMIENTO] No se pudo enriquecer la portada, se continúa con la miniatura: ${enriquecerError.message}`);
+                }
+            }
 
             console.log("🚀 [EXTRACTOR] Lanzando el script de publicación...");
             try {
@@ -302,6 +314,20 @@ async function run() {
             fs.writeFileSync(THREAD_FILE, JSON.stringify(threadContract, null, 2), 'utf8');
             if (fs.existsSync(POST_FILE)) fs.unlinkSync(POST_FILE);
             console.log(`✅ Contrato thread.json generado correctamente con ${threadContract.length} eslabones.`);
+
+            // NUEVO: enriquecimiento de Bandcamp también para hilos (el propio 4_enriquecer_bandcamp.mjs
+            // ya sabe leer thread.json además de post.json).
+            const hayBandcampEnHilo = threadContract.some(item =>
+                (item.externalLink?.uri || '').toLowerCase().includes('bandcamp.com')
+            );
+            if (hayBandcampEnHilo) {
+                console.log("🎵 [EXTRACTOR] Hilo con Bandcamp detectado. Intentando enriquecer con portada(s) grande(s)...");
+                try {
+                    execSync('node 4_enriquecer_bandcamp.mjs', { stdio: 'inherit', cwd: __dirname });
+                } catch (enriquecerError) {
+                    console.error(`⚠️ [ENRIQUECIMIENTO] No se pudo enriquecer alguna portada del hilo, se continúa igualmente: ${enriquecerError.message}`);
+                }
+            }
 
             console.log("🚀 [EXTRACTOR] Lanzando el script de publicación de hilos...");
             try {

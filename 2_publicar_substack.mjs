@@ -105,7 +105,7 @@ const HISTORY_FILE = path.join(__dirname, 'history.json');
         // ============================================================
         // SECCIÓN 6: SUBIR IMÁGENES (si el post.json trae mediaUrls)
         // Esto es lo que ya usan las imágenes nativas (arte, APOD, etc.)
-        // y sería lo que reutilizaría Bandcamp con portada grande.
+        // y lo que ahora también reutiliza Bandcamp con portada grande.
         // ============================================================
         if (tieneImagenes) {
             const localImagePaths = postData.mediaUrls.filter(filePath => fs.existsSync(filePath));
@@ -140,32 +140,28 @@ const HISTORY_FILE = path.join(__dirname, 'history.json');
 
         // ============================================================
         // SECCIÓN 7: AÑADIR EL ENLACE EXTERNO AL TEXTO (si corresponde)
-        //
-        // Aquí es EXACTAMENTE donde iría el cambio de Bandcamp+portada
-        // grande, cuando lo hagamos. Ahora mismo hay dos casos (los dos
-        // "if / else if" de abajo). El cambio futuro añadiría un TERCER
-        // caso en medio de estos dos, sin tocarlos:
-        //
-        //   👉 PUNTO DE INSERCIÓN FUTURA (todavía no añadido) 👈
-        //   "Si es Bandcamp Y tiene imagen (portada grande) -> añadir
-        //    el enlace igualmente, para conservar la tarjeta pequeña
-        //    de Substack A LA VEZ que la foto grande subida arriba."
+        // Tres casos posibles:
+        //   CASO A: posts "link" con imagen -> enlace al final.
+        //   CASO C (NUEVO): Bandcamp CON portada grande -> sube la foto
+        //            (Sección 6) Y añade el enlace igualmente, para
+        //            conservar la tarjetita pequeña de Substack.
+        //   CASO B: sin imagen (bandcamp o link) -> enlace suelto,
+        //            Substack genera su tarjeta automática.
         // ============================================================
         if (enlaceParaAlFinal) {
-            // CASO A (ya existe): posts "link" con imagen -> el enlace
-            // se escribe al final, después de la foto.
+            // CASO A
             console.log(`🔗 Añadiendo enlace externo al final: ${enlaceParaAlFinal}`);
             await page.keyboard.type('\n\n' + enlaceParaAlFinal, { delay: 40 });
             await new Promise(r => setTimeout(r, 4000));
 
-        // <<< AQUÍ, entre este "if" y el "else if" de abajo, iría el nuevo
-        //     bloque para "Bandcamp CON imagen" cuando lo añadamos >>>
+        } else if (tieneImagenes && postData.type === 'bandcamp' && postData.externalLink && postData.externalLink.uri) {
+            // CASO C (NUEVO)
+            console.log(`🔗 Añadiendo enlace externo (Bandcamp, con portada grande adjunta): ${postData.externalLink.uri}`);
+            await page.keyboard.type('\n\n' + postData.externalLink.uri, { delay: 40 });
+            await new Promise(r => setTimeout(r, 4000));
 
         } else if (!tieneImagenes && (postData.type === 'bandcamp' || postData.type === 'link') && postData.externalLink && postData.externalLink.uri) {
-            // CASO B (ya existe, es el que se usa siempre hoy para Bandcamp):
-            // no hay imagen -> se añade el enlace suelto, y Substack genera
-            // su tarjetita pequeña automática. Esto es lo que ves ahora
-            // mismo en tus posts de Bandcamp.
+            // CASO B
             console.log(`🔗 Añadiendo enlace externo (${postData.type}): ${postData.externalLink.uri}`);
             await page.keyboard.type('\n\n' + postData.externalLink.uri, { delay: 40 });
             await new Promise(r => setTimeout(r, 4000));
