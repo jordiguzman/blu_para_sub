@@ -90,12 +90,27 @@ async function extraerDatosPost(post, agent, myDid) {
 
     if (embedType === 'app.bsky.embed.external' && record.embed.external) {
         const ext = record.embed.external;
+        let targetUri = ext.uri;
+
+        // Recuperar la URL limpia y real desde los facets si el cliente la truncó visualmente
+        if (Array.isArray(record.facets)) {
+            for (const facet of record.facets) {
+                if (Array.isArray(facet.features)) {
+                    for (const feature of facet.features) {
+                        if (feature.$type === 'app.bsky.richtext.facet#link' && feature.uri) {
+                            targetUri = feature.uri;
+                        }
+                    }
+                }
+            }
+        }
+
         const thumbRef = ext.thumb?.ref?.$link || ext.thumb?.ref;
         const localThumb = await descargarThumb(post.author.did, thumbRef);
         if (localThumb) mediaUrls.push(localThumb);
 
         externalLink = {
-            uri: ext.uri,
+            uri: targetUri,
             title: ext.title || '',
             description: ext.description || '',
             thumbUrl: thumbRef
@@ -272,9 +287,6 @@ async function run() {
             if (fs.existsSync(THREAD_FILE)) fs.unlinkSync(THREAD_FILE);
             console.log(`✅ Contrato post.json generado correctamente para el post ${postContract.rkey}`);
 
-            // NUEVO: si es Bandcamp, intenta enriquecer con la portada grande ANTES de publicar.
-            // Si algo falla aquí, se registra el aviso y se sigue con la miniatura pequeña de siempre —
-            // esto nunca puede impedir que el post se publique.
             if (postType === 'bandcamp') {
                 console.log("🎵 [EXTRACTOR] Post de Bandcamp detectado. Intentando enriquecer con portada grande...");
                 try {
@@ -315,8 +327,6 @@ async function run() {
             if (fs.existsSync(POST_FILE)) fs.unlinkSync(POST_FILE);
             console.log(`✅ Contrato thread.json generado correctamente con ${threadContract.length} eslabones.`);
 
-            // NUEVO: enriquecimiento de Bandcamp también para hilos (el propio 4_enriquecer_bandcamp.mjs
-            // ya sabe leer thread.json además de post.json).
             const hayBandcampEnHilo = threadContract.some(item =>
                 (item.externalLink?.uri || '').toLowerCase().includes('bandcamp.com')
             );

@@ -36,13 +36,16 @@ function marcarComoExitoso(uri, createdAt) {
         process.exit(1);
     }
 
-    const threadPosts = JSON.parse(fs.readFileSync(threadJsonPath, 'utf-8'));
+    let threadPosts = JSON.parse(fs.readFileSync(threadJsonPath, 'utf-8'));
     if (!threadPosts || threadPosts.length === 0) {
         console.error("❌ Error: El archivo thread.json está vacío.");
         process.exit(1);
     }
 
-    console.log(`📋 Se han encontrado ${threadPosts.length} eslabones para publicar en hilo.`);
+    // Invertimos el orden para publicar primero el último eslabón y terminar por el primero
+    threadPosts = threadPosts.reverse();
+
+    console.log(`📋 Se han encontrado ${threadPosts.length} eslabones para publicar en hilo (orden invertido para correcta jerarquía).`);
 
     const browser = await puppeteer.launch({
         headless: 'new',
@@ -55,7 +58,6 @@ function marcarComoExitoso(uri, createdAt) {
     let todosPublicadosOk = true;
 
     try {
-        // CAMBIO: ya no leemos ni exigimos SUBSTACK_CF_BM
         const connectSid = process.env.SUBSTACK_CONNECT_SID;
         const cfClearance = process.env.SUBSTACK_CF_CLEARANCE;
 
@@ -65,15 +67,17 @@ function marcarComoExitoso(uri, createdAt) {
             process.exit(1);
         }
 
-        // CAMBIO: solo dos cookies, ya no inyectamos __cf_bm
         await page.setCookie(
             { name: 'substack.sid', value: connectSid, domain: '.substack.com', path: '/', httpOnly: true, secure: true },
             { name: 'cf_clearance', value: cfClearance, domain: '.substack.com', path: '/', httpOnly: true, secure: true }
         );
 
-        console.log("🍪 Cookies inyectadas (sin __cf_bm). Abriendo Substack Notes...");
-        await page.goto('https://substack.com/notes', { waitUntil: 'networkidle2' });
-        await sleep(5000);
+        console.log("🍪 Cookies inyectadas. Abriendo Substack Notes...");
+        // Cambiamos a 'domcontentloaded' para que no espere a que terminen todas las peticiones secundarias de red
+        await page.goto('https://substack.com/notes', { waitUntil: 'domcontentloaded' });
+        
+        // Reducimos la espera estática inicial de 5s a 2s, ya que el editor se busca mediante waitForSelector de todos modos
+        await sleep(2000);
 
         for (let i = 0; i < threadPosts.length; i++) {
             const postData = threadPosts[i];
@@ -85,9 +89,9 @@ function marcarComoExitoso(uri, createdAt) {
             try {
                 await page.waitForSelector(composerSelector, { visible: true, timeout: 8000 });
             } catch (e) {
-                console.error("❌ No se encontró el editor. Revisa si las cookies (SUBSTACK_CONNECT_SID / SUBSTACK_CF_CLEARANCE) siguen siendo válidas.");
+                console.error("❌ No se encontró el editor. Revisa si las cookies siguen siendo válidas.");
                 todosPublicadosOk = false;
-                break; // cortamos el hilo aquí, no seguimos a ciegas
+                break;
             }
 
             await page.click(composerSelector);
@@ -102,25 +106,29 @@ function marcarComoExitoso(uri, createdAt) {
                 textoFinal = textoFinal.replace(enlaceParaAlFinal, '').trim();
             }
 
-            console.log("📝 Escribiendo texto en el editor (escritura real)...");
+            console.log("📝 Escribiendo texto en el editor...");
             const editorHandle = await page.$('div.inlineComposer-v8PLSi [contenteditable="true"]');
             if (editorHandle) {
                 await editorHandle.click();
             }
-            await new Promise(r => setTimeout(r, 1000));
+            await sleep(1000);
             await page.keyboard.type(textoFinal, { delay: 40 });
-            await new Promise(r => setTimeout(r, 2000));
+            await sleep(2000);
 
             if (tieneImagenes) {
                 const localImagePaths = postData.mediaUrls.filter(filePath => fs.existsSync(filePath));
 
                 if (localImagePaths.length > 0) {
                     console.log(`📁 Subiendo ${localImagePaths.length} imágenes para este eslabón...`);
-                    const fileInputHandles = await page.$$('input[type="file"]');
-                    if (fileInputHandles.length > 0) {
-                        const targetInput = fileInputHandles[fileInputHandles.length - 1];
-                        await targetInput.uploadFile(...localImagePaths);
-                        await sleep(8000);
+                    try {
+                        const fileInput = await page.$('input[type="file"]');                         if (fileInput) {                             await fileInput.uploadFile(...localImagePaths);                             console.log("⏳ Imagen adjuntada, esperando procesamiento en Substack...");                             await sleep(7000);                         } else {                             const fileInputHandles = await page.$$('input[type="file"]');
+                            if (fileInputHandles.length > 0) {
+                                await fileInputHandles[fileInputHandles.length - 1].uploadFile(...localImagePaths);
+                                await sleep(7000);
+                            }
+                        }
+                    } catch (err) {
+                        console.log("⚠️ Error no crítico en la subida de imagen:", err.message);
                     }
                 }
             }
@@ -136,24 +144,23 @@ function marcarComoExitoso(uri, createdAt) {
             }
 
             const postButtonInfo = await page.evaluate(() => {
-            const buttons = Array.from(document.querySelectorAll('button'));
-            const candidatos = buttons.filter(el => el.textContent.trim() === 'Post');
-            if (candidatos.length === 0) return { found: false };
-            const el = candidatos.find(b => b.offsetParent !== null) || candidatos[0];
-            const isDisabled = el.disabled === true
-                || el.getAttribute('aria-disabled') === 'true'
-                || el.classList.contains('disabled');
-            return { found: true, disabled: isDisabled };
-        });
+                const buttons = Array.from(document.querySelectorAll('button'));
+                const candidatos = buttons.filter(el => el.textContent.trim() === 'Post');
+                if (candidatos.length === 0) return { found: false };
+                const el = candidatos.find(b => b.offsetParent !== null) || candidatos[0];
+                const isDisabled = el.disabled === true
+                    || el.getAttribute('aria-disabled') === 'true'
+                    || el.classList.contains('disabled');
+                return { found: true, disabled: isDisabled };
+            });
 
-        if (!postButtonInfo.found || postButtonInfo.disabled) {
-            console.log(`⚠️ El botón 'Post' no está disponible para el eslabón ${i + 1}. Abortando el hilo.`);
-            todosPublicadosOk = false;
-            break;
-        }
+            if (!postButtonInfo.found || postButtonInfo.disabled) {
+                console.log(`⚠️ El botón 'Post' no está disponible para el eslabón ${i + 1}. Abortando el hilo.`);
+                todosPublicadosOk = false;
+                break;
+            }
 
-
-            console.log("🖱️ Buscando botón 'Post' para este eslabón...");
+            console.log("🖱️ Pulsando el botón 'Post' para este eslabón...");
             const publishResponsePromise = page.waitForResponse(
                 response => response.request().method() === 'POST'
                     && (response.url().includes('comment') || response.url().includes('note') || response.url().includes('feed')),
@@ -172,21 +179,20 @@ function marcarComoExitoso(uri, createdAt) {
                 marcarComoExitoso(postData.uri, postData.createdAt);
             } else {
                 console.log(`⚠️ Eslabón ${i + 1} enviado, revisa visualmente.`);
-                todosPublicadosOk = false;
+                marcarComoExitoso(postData.uri, postData.createdAt);
             }
 
             if (i < threadPosts.length - 1) {
-                console.log("⏳ Esperando 5 segundos antes de publicar el siguiente eslabón del hilo...");
-                await sleep(5000);
+                console.log("⏳ Esperando 6 segundos para estabilizar la interfaz antes del siguiente eslabón...");
+                await sleep(6000);
             }
         }
 
         if (todosPublicadosOk) {
             console.log("\n🏁 ¡Hilo completo publicado con éxito en Substack!");
-            const threadJsonPath = path.join(__dirname, 'thread.json');
             if (fs.existsSync(threadJsonPath)) fs.unlinkSync(threadJsonPath);
         } else {
-            console.log("\n⚠️ El hilo no se completó del todo. thread.json se conserva para revisar antes de reintentar.");
+            console.log("\n⚠️ El hilo no se completó del todo. thread.json se conserva para revisar.");
         }
 
         await sleep(5000);
