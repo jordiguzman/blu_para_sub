@@ -80,6 +80,7 @@ const HISTORY_FILE = path.join(__dirname, 'history.json');
         const postData = JSON.parse(fs.readFileSync(jsonPath, 'utf-8'));
 
         const tieneImagenes = postData.mediaUrls && postData.mediaUrls.length > 0;
+        const tieneVideo = !!postData.videoUrl && fs.existsSync(postData.videoUrl); // NUEVO
         let textoFinal = postData.text.trim();
         let enlaceParaAlFinal = null;
 
@@ -107,6 +108,46 @@ const HISTORY_FILE = path.join(__dirname, 'history.json');
         // Esto es lo que ya usan las imágenes nativas (arte, APOD, etc.)
         // y lo que ahora también reutiliza Bandcamp con portada grande.
         // ============================================================
+        // ============================================================
+        // SECCIÓN 6a (NUEVA): SUBIR VÍDEO (si el post.json trae videoUrl)
+        // Bloque totalmente aparte de la subida de imágenes — un post
+        // de vídeo nunca tiene mediaUrls a la vez, así que no chocan.
+        // ============================================================
+        if (tieneVideo) {
+            console.log("📹 Subiendo vídeo preparado localmente...");
+            const inputsInfo = await page.evaluate(() => {
+                const inputs = Array.from(document.querySelectorAll('input[type="file"]'));
+                return inputs.map((el, i) => ({
+                    index: i,
+                    accept: el.getAttribute('accept'),
+                }));
+            });
+
+            // Buscamos un input que acepte vídeo; si no hay uno específico,
+            // probamos con el primero disponible (igual que hacemos con imágenes).
+            const targetIndex = inputsInfo.findIndex(i => i.accept && i.accept.includes('video'));
+            const chosenIndex = targetIndex !== -1 ? targetIndex : 0;
+
+            if (inputsInfo.length > 0) {
+                const fileInputHandles = await page.$$('input[type="file"]');
+                const targetInput = fileInputHandles[chosenIndex];
+
+                await targetInput.uploadFile(postData.videoUrl);
+                console.log("📤 Vídeo entregado al input. Esperando a que Substack lo procese...");
+                // Los vídeos tardan más que una imagen en procesarse; damos más margen.
+                await new Promise(r => setTimeout(r, 20000));
+            } else {
+                console.error("❌ ERROR: No se encontró ningún input de archivo para subir el vídeo.");
+            }
+        }
+
+        // ============================================================
+        // SECCIÓN 6: SUBIR IMÁGENES (si el post.json trae mediaUrls)
+        // Esto es lo que ya usan las imágenes nativas (arte, APOD, etc.)
+        // y lo que ahora también reutiliza Bandcamp con portada grande.
+        // ============================================================
+        
+
         if (tieneImagenes) {
             const localImagePaths = postData.mediaUrls.filter(filePath => fs.existsSync(filePath));
 

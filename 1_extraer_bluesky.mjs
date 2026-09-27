@@ -60,6 +60,26 @@ async function descargarThumb(authorDid, thumbRef) {
     return null;
 }
 
+// NUEVO: descarga un vídeo nativo adjunto directamente al post
+async function descargarVideoNativo(agent, authorDid, blobRef, rkey) {
+    if (!blobRef) return null;
+    try {
+        const blobRes = await agent.com.atproto.sync.getBlob({
+            did: authorDid,
+            cid: blobRef
+        });
+        if (blobRes?.data) {
+            const buffer = Buffer.from(blobRes.data);
+            const localPath = path.join(TEMP_MEDIA_DIR, `video_${rkey}.mp4`);
+            fs.writeFileSync(localPath, buffer);
+            return localPath;
+        }
+    } catch (err) {
+        console.log(`⚠️ Error descargando vídeo nativo: ${err.message}`);
+    }
+    return null;
+}
+
 // Descarga una imagen nativa adjunta directamente al post, en su calidad real (no miniatura)
 async function descargarImagenNativa(agent, authorDid, blobRef, rkey, indice) {
     if (!blobRef) return null;
@@ -119,7 +139,7 @@ async function extraerDatosPost(post, agent, myDid) {
         };
     }
 
-    // Imágenes adjuntadas directamente al post (arte manual, APOD, Cassini, HiRISE, etc.)
+        // Imágenes adjuntadas directamente al post (arte manual, APOD, Cassini, HiRISE, etc.)
     if (embedType === 'app.bsky.embed.images' && record.embed.images?.length > 0) {
         for (let i = 0; i < record.embed.images.length; i++) {
             const img = record.embed.images[i];
@@ -129,6 +149,13 @@ async function extraerDatosPost(post, agent, myDid) {
         }
     }
 
+    // NUEVO: vídeo adjuntado directamente al post (propio o de terceros como APOD)
+    let videoUrl = null;
+    if (embedType === 'app.bsky.embed.video' && record.embed.video) {
+        const videoBlobRef = record.embed.video.ref?.$link || record.embed.video.ref;
+        videoUrl = await descargarVideoNativo(agent, post.author.did, videoBlobRef, rkey);
+    }
+
     return {
         uri: post.uri,
         rkey,
@@ -136,7 +163,8 @@ async function extraerDatosPost(post, agent, myDid) {
         text: record.text || '',
         embedType,
         mediaUrls,
-        externalLink
+        externalLink,
+        videoUrl
     };
 }
 
@@ -264,11 +292,13 @@ async function run() {
             const post = unidadElegida[0];
             const datos = await extraerDatosPost(post, agent, myDid);
 
-            let postType = 'text';
+                        let postType = 'text';
             if (datos.embedType === 'app.bsky.embed.external' && datos.externalLink) {
                 postType = datos.externalLink.uri.toLowerCase().includes('bandcamp.com') ? 'bandcamp' : 'link';
             } else if (datos.embedType === 'app.bsky.embed.images' && datos.mediaUrls.length > 0) {
                 postType = 'media';
+            } else if (datos.embedType === 'app.bsky.embed.video' && datos.videoUrl) {
+                postType = 'video'; // NUEVO
             }
 
             console.log(`📝 Procesando post seleccionado: "${datos.text.substring(0, 40)}..." (rkey: ${datos.rkey})`);
@@ -280,9 +310,9 @@ async function run() {
                 type: postType,
                 text: datos.text,
                 mediaUrls: datos.mediaUrls,
-                externalLink: datos.externalLink
+                externalLink: datos.externalLink,
+                videoUrl: datos.videoUrl // NUEVO
             };
-
             fs.writeFileSync(POST_FILE, JSON.stringify(postContract, null, 2), 'utf8');
             if (fs.existsSync(THREAD_FILE)) fs.unlinkSync(THREAD_FILE);
             console.log(`✅ Contrato post.json generado correctamente para el post ${postContract.rkey}`);
