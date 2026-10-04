@@ -225,7 +225,7 @@ async function run() {
 
         const grupos = new Map();
 
-        for (const item of feedItems) {
+                for (const item of feedItems) {
             const post = item.post;
             if (post.author.did !== myDid) continue;
 
@@ -237,6 +237,12 @@ async function run() {
                 if (parentAuthorDid !== myDid) continue;
                 rootUri = reply.root?.uri || post.uri;
             }
+
+            // NUEVO: descarta posts que enlazan a tu propio Substack (evita republicar tus propios artículos)
+            const externalUri = post.record.embed?.$type === 'app.bsky.embed.external'
+                ? post.record.embed.external?.uri
+                : null;
+            if (externalUri && externalUri.toLowerCase().includes('substack.com/@juanmentat')) continue;
 
             if (yaHecho(post.uri)) continue;
 
