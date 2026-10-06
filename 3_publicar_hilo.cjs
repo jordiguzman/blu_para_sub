@@ -5,6 +5,12 @@ const path = require('path');
 const fs = require('fs');
 require('dotenv').config({ path: path.join(__dirname, 'config', '.env') });
 
+// Antepone fecha y hora a cada console.log, para poder diagnosticar el log con certeza
+const _origLog = console.log;
+console.log = (...args) => _origLog(`[${new Date().toISOString()}]`, ...args);
+const _origError = console.error;
+console.error = (...args) => _origError(`[${new Date().toISOString()}]`, ...args);
+
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 const HISTORY_FILE = path.join(__dirname, 'history.json');

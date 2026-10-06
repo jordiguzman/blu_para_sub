@@ -6,6 +6,12 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 
+// Antepone fecha y hora a cada console.log, para poder diagnosticar el log con certeza
+const _origLog = console.log;
+console.log = (...args) => _origLog(`[${new Date().toISOString()}]`, ...args);
+const _origError = console.error;
+console.error = (...args) => _origError(`[${new Date().toISOString()}]`, ...args);
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 

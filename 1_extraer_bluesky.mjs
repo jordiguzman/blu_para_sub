@@ -6,9 +6,36 @@ import process from 'process';
 import { fileURLToPath } from 'url';
 import { execSync } from 'child_process';
 
+
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+// Antepone fecha y hora a cada console.log, para poder diagnosticar el log con certeza
+const _origLog = console.log;
+console.log = (...args) => _origLog(`[${new Date().toISOString()}]`, ...args);
+const _origError = console.error;
+console.error = (...args) => _origError(`[${new Date().toISOString()}]`, ...args);
 
+// Rota el log semanalmente: si la primera línea tiene más de 7 días, archiva el log actual y empieza uno nuevo
+const LOG_FILE = path.join(__dirname, 'logs', 'extractor.log');
+try {
+    if (fs.existsSync(LOG_FILE)) {
+        const contenido = fs.readFileSync(LOG_FILE, 'utf8');
+        const primeraLinea = contenido.split('\n')[0];
+        const match = primeraLinea.match(/\[(.+?)\]/);
+        if (match) {
+            const fechaPrimeraLinea = new Date(match[1]);
+            const seteDiasMs = 7 * 24 * 60 * 60 * 1000;
+            if (!isNaN(fechaPrimeraLinea) && (Date.now() - fechaPrimeraLinea.getTime()) > seteDiasMs) {
+                const nombreArchivo = `extractor_${new Date().toISOString().slice(0, 10)}.log`;
+                fs.renameSync(LOG_FILE, path.join(__dirname, 'logs', nombreArchivo));
+                console.log(`🗂️ Log rotado automáticamente (más de 7 días). Archivado como ${nombreArchivo}.`);
+            }
+        }
+    }
+} catch (err) {
+    console.log(`⚠️ No se pudo comprobar/rotar el log: ${err.message}`);
+}
 dotenv.config({ path: path.join(__dirname, 'config', '.env') });
 
 const LOCK_FILE = path.join(__dirname, 'process.lock');
@@ -17,7 +44,7 @@ const POST_FILE = path.join(__dirname, 'post.json');
 const THREAD_FILE = path.join(__dirname, 'thread.json');
 const TEMP_MEDIA_DIR = path.join(__dirname, 'temp_media');
 const ATTEMPTS_FILE = path.join(__dirname, 'attempts.json');
-const MAX_ATTEMPTS = 5;
+const MAX_ATTEMPTS = 3;
 
 if (fs.existsSync(LOCK_FILE)) {
     const lockStats = fs.statSync(LOCK_FILE);
