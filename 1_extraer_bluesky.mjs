@@ -270,6 +270,9 @@ async function run() {
                 ? post.record.embed.external?.uri
                 : null;
             if (externalUri && externalUri.toLowerCase().includes('substack.com/@juanmentat')) continue;
+                        // NUEVO: descarta citas (quote posts): sin el post citado, el texto queda sin contexto en Substack
+            const embedTypePost = post.record.embed?.$type;
+            if (embedTypePost === 'app.bsky.embed.record' || embedTypePost === 'app.bsky.embed.recordWithMedia') continue;
 
             if (yaHecho(post.uri)) continue;
 
