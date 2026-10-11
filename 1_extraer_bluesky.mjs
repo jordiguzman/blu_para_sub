@@ -127,6 +127,33 @@ async function descargarImagenNativa(agent, authorDid, blobRef, rkey, indice) {
     return null;
 }
 
+// NUEVO: sustituye cada enlace recortado del texto por la URL completa que Bluesky guarda en los facets.
+// Los índices de los facets son bytes UTF-8, no caracteres, por eso se trabaja con Buffer.
+function expandirEnlacesDelTexto(record) {
+    const texto = record.text || '';
+    if (!Array.isArray(record.facets) || record.facets.length === 0) return texto;
+
+    const enlaces = [];
+    for (const facet of record.facets) {
+        const feature = (facet.features || []).find(
+            f => f.$type === 'app.bsky.richtext.facet#link' && f.uri
+        );
+        if (feature && facet.index) {
+            enlaces.push({ start: facet.index.byteStart, end: facet.index.byteEnd, uri: feature.uri });
+        }
+    }
+    if (enlaces.length === 0) return texto;
+
+    // De atrás hacia delante, para que sustituir uno no desplace los índices de los anteriores
+    enlaces.sort((a, b) => b.start - a.start);
+
+    let bytes = Buffer.from(texto, 'utf8');
+    for (const { start, end, uri } of enlaces) {
+        bytes = Buffer.concat([bytes.subarray(0, start), Buffer.from(uri, 'utf8'), bytes.subarray(end)]);
+    }
+    return bytes.toString('utf8');
+}
+
 // Extrae los datos comunes de un post individual (texto, embed, media descargada)
 async function extraerDatosPost(post, agent, myDid) {
     const record = post.record;
@@ -187,7 +214,7 @@ async function extraerDatosPost(post, agent, myDid) {
         uri: post.uri,
         rkey,
         createdAt: record.createdAt,
-        text: record.text || '',
+        text: embedType === 'app.bsky.embed.external' ? (record.text || '') : expandirEnlacesDelTexto(record),
         embedType,
         mediaUrls,
         externalLink,
