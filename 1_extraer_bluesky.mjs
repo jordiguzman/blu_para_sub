@@ -292,19 +292,12 @@ async function run() {
                 rootUri = reply.root?.uri || post.uri;
             }
 
-                        // Descarta posts que enlazan a tu propio Substack, en cualquier formato de URL y estén donde estén
-            const esSubstackPropio = (url) =>
-                /juanmentat\.substack\.com|substack\.com\/(@|pub\/)juanmentat/i.test(url || '');
-            const urlsDelPost = [];
-            if (post.record.embed?.$type === 'app.bsky.embed.external') {
-                urlsDelPost.push(post.record.embed.external?.uri);
-            }
-            for (const facet of post.record.facets || []) {
-                for (const f of facet.features || []) {
-                    if (f.$type === 'app.bsky.richtext.facet#link') urlsDelPost.push(f.uri);
-                }
-            }
-            if (urlsDelPost.some(esSubstackPropio)) continue;
+            // NUEVO: descarta posts que enlazan a tu propio Substack (evita republicar tus propios artículos)
+            const externalUri = post.record.embed?.$type === 'app.bsky.embed.external'
+                ? post.record.embed.external?.uri
+                : null;
+            if (externalUri && externalUri.toLowerCase().includes('substack.com/@juanmentat')) continue;
+                        // NUEVO: descarta citas (quote posts): sin el post citado, el texto queda sin contexto en Substack
             const embedTypePost = post.record.embed?.$type;
             if (embedTypePost === 'app.bsky.embed.record' || embedTypePost === 'app.bsky.embed.recordWithMedia') continue;
 
