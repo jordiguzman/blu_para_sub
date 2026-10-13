@@ -1,0 +1,460 @@
+import { BskyAgent } from '@atproto/api';
+import * as dotenv from 'dotenv';
+import fs from 'fs';
+import path from 'path';
+import process from 'process';
+import { fileURLToPath } from 'url';
+import { execSync } from 'child_process';
+
+
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+// Antepone fecha y hora a cada console.log, para poder diagnosticar el log con certeza
+const _origLog = console.log;
+console.log = (...args) => _origLog(`[${new Date().toISOString()}]`, ...args);
+const _origError = console.error;
+console.error = (...args) => _origError(`[${new Date().toISOString()}]`, ...args);
+
+// Rota el log semanalmente: si la primera línea tiene más de 7 días, archiva el log actual y empieza uno nuevo
+const LOG_FILE = path.join(__dirname, 'logs', 'extractor.log');
+try {
+    if (fs.existsSync(LOG_FILE)) {
+        const contenido = fs.readFileSync(LOG_FILE, 'utf8');
+        const primeraLinea = contenido.split('\n')[0];
+        const match = primeraLinea.match(/\[(.+?)\]/);
+        if (match) {
+            const fechaPrimeraLinea = new Date(match[1]);
+            const seteDiasMs = 7 * 24 * 60 * 60 * 1000;
+            if (!isNaN(fechaPrimeraLinea) && (Date.now() - fechaPrimeraLinea.getTime()) > seteDiasMs) {
+                const nombreArchivo = `extractor_${new Date().toISOString().slice(0, 10)}.log`;
+                fs.renameSync(LOG_FILE, path.join(__dirname, 'logs', nombreArchivo));
+                console.log(`🗂️ Log rotado automáticamente (más de 7 días). Archivado como ${nombreArchivo}.`);
+            }
+        }
+    }
+} catch (err) {
+    console.log(`⚠️ No se pudo comprobar/rotar el log: ${err.message}`);
+}
+dotenv.config({ path: path.join(__dirname, 'config', '.env') });
+
+const LOCK_FILE = path.join(__dirname, 'process.lock');
+const HISTORY_FILE = path.join(__dirname, 'history.json');
+const POST_FILE = path.join(__dirname, 'post.json');
+const THREAD_FILE = path.join(__dirname, 'thread.json');
+const TEMP_MEDIA_DIR = path.join(__dirname, 'temp_media');
+const ATTEMPTS_FILE = path.join(__dirname, 'attempts.json');
+const MAX_ATTEMPTS = 3;
+
+if (fs.existsSync(LOCK_FILE)) {
+    const lockStats = fs.statSync(LOCK_FILE);
+    const lockAgeMs = Date.now() - lockStats.mtimeMs;
+    if (lockAgeMs < 15 * 60 * 1000) {
+        console.log("🔒 [LOCK] Otra instancia está en ejecución. Abortando.");
+        process.exit(0);
+    }
+}
+fs.writeFileSync(LOCK_FILE, String(process.pid));
+
+function leerIntentos() {
+    if (!fs.existsSync(ATTEMPTS_FILE)) return {};
+    try {
+        return JSON.parse(fs.readFileSync(ATTEMPTS_FILE, 'utf8'));
+    } catch (e) {
+        return {};
+    }
+}
+
+function guardarIntentos(intentos) {
+    fs.writeFileSync(ATTEMPTS_FILE, JSON.stringify(intentos, null, 2), 'utf8');
+}
+
+// Descarga la miniatura de un embed externo (link-card) y devuelve la ruta local o null
+async function descargarThumb(authorDid, thumbRef) {
+    if (!thumbRef) return null;
+    const thumbUrl = `https://cdn.bsky.social/img/feed_thumbnail/plain/${authorDid}/${thumbRef}`;
+    try {
+        const res = await fetch(thumbUrl);
+        if (res.ok) {
+            const buffer = Buffer.from(await res.arrayBuffer());
+            const localPath = path.join(TEMP_MEDIA_DIR, `thumb_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.jpg`);
+            fs.writeFileSync(localPath, buffer);
+            return localPath;
+        }
+    } catch (err) {
+        console.log(`⚠️ Error descargando miniatura: ${err.message}`);
+    }
+    return null;
+}
+
+// NUEVO: descarga un vídeo nativo adjunto directamente al post
+async function descargarVideoNativo(agent, authorDid, blobRef, rkey) {
+    if (!blobRef) return null;
+    try {
+        const blobRes = await agent.com.atproto.sync.getBlob({
+            did: authorDid,
+            cid: blobRef
+        });
+        if (blobRes?.data) {
+            const buffer = Buffer.from(blobRes.data);
+            const localPath = path.join(TEMP_MEDIA_DIR, `video_${rkey}.mp4`);
+            fs.writeFileSync(localPath, buffer);
+            return localPath;
+        }
+    } catch (err) {
+        console.log(`⚠️ Error descargando vídeo nativo: ${err.message}`);
+    }
+    return null;
+}
+
+// Descarga una imagen nativa adjunta directamente al post, en su calidad real (no miniatura)
+async function descargarImagenNativa(agent, authorDid, blobRef, rkey, indice) {
+    if (!blobRef) return null;
+    try {
+        const blobRes = await agent.com.atproto.sync.getBlob({
+            did: authorDid,
+            cid: blobRef
+        });
+        if (blobRes?.data) {
+            const buffer = Buffer.from(blobRes.data);
+            const localPath = path.join(TEMP_MEDIA_DIR, `img_${rkey}_${indice}.jpg`);
+            fs.writeFileSync(localPath, buffer);
+            return localPath;
+        }
+    } catch (err) {
+        console.log(`⚠️ Error descargando imagen nativa ${indice}: ${err.message}`);
+    }
+    return null;
+}
+
+// NUEVO: sustituye cada enlace recortado del texto por la URL completa que Bluesky guarda en los facets.
+// Los índices de los facets son bytes UTF-8, no caracteres, por eso se trabaja con Buffer.
+function expandirEnlacesDelTexto(record) {
+    const texto = record.text || '';
+    if (!Array.isArray(record.facets) || record.facets.length === 0) return texto;
+
+    const enlaces = [];
+    for (const facet of record.facets) {
+        const feature = (facet.features || []).find(
+            f => f.$type === 'app.bsky.richtext.facet#link' && f.uri
+        );
+        if (feature && facet.index) {
+            enlaces.push({ start: facet.index.byteStart, end: facet.index.byteEnd, uri: feature.uri });
+        }
+    }
+    if (enlaces.length === 0) return texto;
+
+    // De atrás hacia delante, para que sustituir uno no desplace los índices de los anteriores
+    enlaces.sort((a, b) => b.start - a.start);
+
+    let bytes = Buffer.from(texto, 'utf8');
+    for (const { start, end, uri } of enlaces) {
+        bytes = Buffer.concat([bytes.subarray(0, start), Buffer.from(uri, 'utf8'), bytes.subarray(end)]);
+    }
+    return bytes.toString('utf8');
+}
+
+// Extrae los datos comunes de un post individual (texto, embed, media descargada)
+async function extraerDatosPost(post, agent, myDid) {
+    const record = post.record;
+    let mediaUrls = [];
+    let externalLink = null;
+    const embedType = record.embed?.$type || null;
+    const rkey = post.uri.split('/').pop();
+
+    if (embedType === 'app.bsky.embed.external' && record.embed.external) {
+        const ext = record.embed.external;
+        let targetUri = ext.uri;
+
+        // Recuperar la URL limpia y real desde los facets si el cliente la truncó visualmente
+        if (Array.isArray(record.facets)) {
+            for (const facet of record.facets) {
+                if (Array.isArray(facet.features)) {
+                    for (const feature of facet.features) {
+                        if (feature.$type === 'app.bsky.richtext.facet#link' && feature.uri) {
+                            targetUri = feature.uri;
+                        }
+                    }
+                }
+            }
+        }
+
+        const thumbRef = ext.thumb?.ref?.$link || ext.thumb?.ref;
+        const localThumb = await descargarThumb(post.author.did, thumbRef);
+        if (localThumb) mediaUrls.push(localThumb);
+
+        externalLink = {
+            uri: targetUri,
+            title: ext.title || '',
+            description: ext.description || '',
+            thumbUrl: thumbRef
+                ? `https://cdn.bsky.social/img/feed_thumbnail/plain/${post.author.did}/${thumbRef}`
+                : null
+        };
+    }
+
+        // Imágenes adjuntadas directamente al post (arte manual, APOD, Cassini, HiRISE, etc.)
+    if (embedType === 'app.bsky.embed.images' && record.embed.images?.length > 0) {
+        for (let i = 0; i < record.embed.images.length; i++) {
+            const img = record.embed.images[i];
+            const blobRef = img.image?.ref?.$link || img.image?.ref;
+            const localPath = await descargarImagenNativa(agent, myDid, blobRef, rkey, i);
+            if (localPath) mediaUrls.push(localPath);
+        }
+    }
+
+    // NUEVO: vídeo adjuntado directamente al post (propio o de terceros como APOD)
+    let videoUrl = null;
+    if (embedType === 'app.bsky.embed.video' && record.embed.video) {
+        const videoBlobRef = record.embed.video.ref?.$link || record.embed.video.ref;
+        videoUrl = await descargarVideoNativo(agent, post.author.did, videoBlobRef, rkey);
+    }
+
+    return {
+        uri: post.uri,
+        rkey,
+        createdAt: record.createdAt,
+        text: embedType === 'app.bsky.embed.external' ? (record.text || '') : expandirEnlacesDelTexto(record),
+        embedType,
+        mediaUrls,
+        externalLink,
+        videoUrl
+    };
+}
+
+async function run() {
+    try {
+        console.log("🚀 [EXTRACTOR BLUESKY] Conectando...");
+        const agent = new BskyAgent({ service: 'https://bsky.social' });
+
+        await agent.login({
+            identifier: process.env.BSKY_HANDLE,
+            password: process.env.BSKY_APP_PASSWORD
+        });
+
+        const profile = await agent.getProfile({ actor: process.env.BSKY_HANDLE });
+        const myDid = profile.data.did;
+
+        const feedResponse = await agent.getAuthorFeed({
+            actor: process.env.BSKY_HANDLE,
+            filter: 'posts_with_replies',
+            limit: 30
+        });
+
+        const feedItems = feedResponse.data.feed;
+
+        let history = [];
+        let historyExists = fs.existsSync(HISTORY_FILE);
+        if (historyExists) {
+            try {
+                history = JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf8'));
+            } catch (e) {
+                history = [];
+            }
+        }
+
+        const ownRootPosts = feedItems
+            .map(item => item.post)
+            .filter(post => post.author.did === myDid);
+
+        if (!historyExists || history.length === 0) {
+            console.log("🌟 [BASELINE] Arranque en frío detectado. Registrando historial inicial...");
+            const baselineHistory = ownRootPosts.map(post => ({
+                uri: post.uri,
+                status: 'INITIAL_BASELINE',
+                createdAt: post.record.createdAt,
+                timestamp: new Date().toISOString()
+            }));
+            fs.writeFileSync(HISTORY_FILE, JSON.stringify(baselineHistory, null, 2), 'utf8');
+            if (fs.existsSync(POST_FILE)) fs.unlinkSync(POST_FILE);
+            if (fs.existsSync(THREAD_FILE)) fs.unlinkSync(THREAD_FILE);
+            console.log(`✅ Historial inicial establecido con ${baselineHistory.length} elementos.`);
+            return;
+        }
+
+        const successfulUris = new Set(history.filter(h => h.status === 'SUCCESS').map(h => h.uri));
+        const baselineUris = new Set(history.filter(h => h.status === 'INITIAL_BASELINE').map(h => h.uri));
+        const skippedUris = new Set(history.filter(h => h.status === 'SKIPPED_MANUAL_REVIEW').map(h => h.uri));
+        const yaHecho = (uri) => successfulUris.has(uri) || baselineUris.has(uri) || skippedUris.has(uri);
+
+        const grupos = new Map();
+
+                for (const item of feedItems) {
+            const post = item.post;
+            if (post.author.did !== myDid) continue;
+
+            const reply = item.reply;
+            let rootUri = post.uri;
+
+            if (reply) {
+                const parentAuthorDid = reply.parent?.author?.did;
+                if (parentAuthorDid !== myDid) continue;
+                rootUri = reply.root?.uri || post.uri;
+            }
+
+                        // Descarta posts que enlazan a tu propio Substack, en cualquier formato de URL y estén donde estén
+            const esSubstackPropio = (url) =>
+                /juanmentat\.substack\.com|substack\.com\/(@|pub\/)juanmentat/i.test(url || '');
+            const urlsDelPost = [];
+            if (post.record.embed?.$type === 'app.bsky.embed.external') {
+                urlsDelPost.push(post.record.embed.external?.uri);
+            }
+            for (const facet of post.record.facets || []) {
+                for (const f of facet.features || []) {
+                    if (f.$type === 'app.bsky.richtext.facet#link') urlsDelPost.push(f.uri);
+                }
+            }
+            if (urlsDelPost.some(esSubstackPropio)) continue;
+            const embedTypePost = post.record.embed?.$type;
+            if (embedTypePost === 'app.bsky.embed.record' || embedTypePost === 'app.bsky.embed.recordWithMedia') continue;
+
+            if (yaHecho(post.uri)) continue;
+
+            if (!grupos.has(rootUri)) grupos.set(rootUri, []);
+            grupos.get(rootUri).push(post);
+        }
+
+        const unidades = Array.from(grupos.values())
+            .filter(posts => posts.length > 0)
+            .map(posts => posts.sort((a, b) => new Date(a.record.createdAt) - new Date(b.record.createdAt)));
+
+        unidades.sort((a, b) => new Date(a[0].record.createdAt) - new Date(b[0].record.createdAt));
+
+        if (unidades.length === 0) {
+            console.log("✅ Todo al día. No hay posts pendientes.");
+            if (fs.existsSync(POST_FILE)) fs.unlinkSync(POST_FILE);
+            if (fs.existsSync(THREAD_FILE)) fs.unlinkSync(THREAD_FILE);
+            return;
+        }
+
+        const unidadElegida = unidades[0];
+        const claveUnidad = unidadElegida[0].uri;
+
+        let intentos = leerIntentos();
+        intentos[claveUnidad] = (intentos[claveUnidad] || 0) + 1;
+
+        if (intentos[claveUnidad] > MAX_ATTEMPTS) {
+            console.log(`🚫 "${claveUnidad}" ha fallado ${MAX_ATTEMPTS} veces seguidas. Se aparta para revisión manual, no se reintenta más.`);
+
+            for (const post of unidadElegida) {
+                history.push({
+                    uri: post.uri,
+                    status: 'SKIPPED_MANUAL_REVIEW',
+                    createdAt: post.record.createdAt,
+                    timestamp: new Date().toISOString()
+                });
+            }
+            fs.writeFileSync(HISTORY_FILE, JSON.stringify(history, null, 2), 'utf8');
+
+            delete intentos[claveUnidad];
+            guardarIntentos(intentos);
+            return;
+        }
+        guardarIntentos(intentos);
+
+        if (!fs.existsSync(TEMP_MEDIA_DIR)) {
+            fs.mkdirSync(TEMP_MEDIA_DIR, { recursive: true });
+        } else {
+            fs.readdirSync(TEMP_MEDIA_DIR).forEach(file => fs.unlinkSync(path.join(TEMP_MEDIA_DIR, file)));
+        }
+
+        if (unidadElegida.length === 1) {
+            const post = unidadElegida[0];
+            const datos = await extraerDatosPost(post, agent, myDid);
+
+                        let postType = 'text';
+            if (datos.embedType === 'app.bsky.embed.external' && datos.externalLink) {
+                postType = datos.externalLink.uri.toLowerCase().includes('bandcamp.com') ? 'bandcamp' : 'link';
+            } else if (datos.embedType === 'app.bsky.embed.images' && datos.mediaUrls.length > 0) {
+                postType = 'media';
+            } else if (datos.embedType === 'app.bsky.embed.video' && datos.videoUrl) {
+                postType = 'video'; // NUEVO
+            }
+
+            console.log(`📝 Procesando post seleccionado: "${datos.text.substring(0, 40)}..." (rkey: ${datos.rkey})`);
+
+            const postContract = {
+                uri: datos.uri,
+                rkey: datos.rkey,
+                createdAt: datos.createdAt,
+                type: postType,
+                text: datos.text,
+                mediaUrls: datos.mediaUrls,
+                externalLink: datos.externalLink,
+                videoUrl: datos.videoUrl // NUEVO
+            };
+            fs.writeFileSync(POST_FILE, JSON.stringify(postContract, null, 2), 'utf8');
+            if (fs.existsSync(THREAD_FILE)) fs.unlinkSync(THREAD_FILE);
+            console.log(`✅ Contrato post.json generado correctamente para el post ${postContract.rkey}`);
+
+            if (postType === 'bandcamp') {
+                console.log("🎵 [EXTRACTOR] Post de Bandcamp detectado. Intentando enriquecer con portada grande...");
+                try {
+                    execSync('node 4_enriquecer_bandcamp.mjs', { stdio: 'inherit', cwd: __dirname });
+                } catch (enriquecerError) {
+                    console.error(`⚠️ [ENRIQUECIMIENTO] No se pudo enriquecer la portada, se continúa con la miniatura: ${enriquecerError.message}`);
+                }
+            }
+
+            console.log("🚀 [EXTRACTOR] Lanzando el script de publicación...");
+            try {
+                execSync('node 2_publicar_substack.mjs', { stdio: 'inherit', cwd: __dirname });
+            } catch (pubError) {
+                console.error(`❌ [PUBLICADOR] Error al ejecutar el script de publicación: ${pubError.message}`);
+            }
+
+        } else {
+            console.log(`🧵 Hilo detectado con ${unidadElegida.length} eslabones pendientes.`);
+
+            const threadContract = [];
+            for (const post of unidadElegida) {
+                const datos = await extraerDatosPost(post, agent, myDid);
+                threadContract.push({
+                    uri: datos.uri,
+                    rkey: datos.rkey,
+                    text: datos.text,
+                    hashtags: datos.text.match(/#\w+/g) || [],
+                    createdAt: datos.createdAt,
+                    hasMedia: datos.mediaUrls.length > 0,
+                    mediaType: datos.embedType,
+                    mediaUrls: datos.mediaUrls,
+                    externalLink: datos.externalLink,
+                    video: null
+                });
+            }
+
+            fs.writeFileSync(THREAD_FILE, JSON.stringify(threadContract, null, 2), 'utf8');
+            if (fs.existsSync(POST_FILE)) fs.unlinkSync(POST_FILE);
+            console.log(`✅ Contrato thread.json generado correctamente con ${threadContract.length} eslabones.`);
+
+            const hayBandcampEnHilo = threadContract.some(item =>
+                (item.externalLink?.uri || '').toLowerCase().includes('bandcamp.com')
+            );
+            if (hayBandcampEnHilo) {
+                console.log("🎵 [EXTRACTOR] Hilo con Bandcamp detectado. Intentando enriquecer con portada(s) grande(s)...");
+                try {
+                    execSync('node 4_enriquecer_bandcamp.mjs', { stdio: 'inherit', cwd: __dirname });
+                } catch (enriquecerError) {
+                    console.error(`⚠️ [ENRIQUECIMIENTO] No se pudo enriquecer alguna portada del hilo, se continúa igualmente: ${enriquecerError.message}`);
+                }
+            }
+
+            console.log("🚀 [EXTRACTOR] Lanzando el script de publicación de hilos...");
+            try {
+                execSync('node 3_publicar_hilo.cjs', { stdio: 'inherit', cwd: __dirname });
+            } catch (pubError) {
+                console.error(`❌ [PUBLICADOR DE HILOS] Error al ejecutar el script de publicación: ${pubError.message}`);
+            }
+        }
+
+    } catch (error) {
+        console.error(`❌ Error en Extractor: ${error.message}`);
+        process.exit(1);
+    } finally {
+        if (fs.existsSync(LOCK_FILE)) {
+            fs.unlinkSync(LOCK_FILE);
+        }
+    }
+}
+
+run();

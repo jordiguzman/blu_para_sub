@@ -1,0 +1,65 @@
+Resumen de lo nuevo en 1_extraer_bluesky.mjs y 2_publicar_substack.mjs
+
+1) Novedades en 1_extraer_bluesky.mjs
+
+- Se ha añadido soporte para vídeos nativos de Bluesky.
+  - Si un post usa embed de tipo app.bsky.embed.video, el script descarga el archivo real desde el blob de Bluesky usando agent.com.atproto.sync.getBlob.
+  - El video se guarda localmente en la carpeta temp_media con nombre tipo video_<rkey>.mp4.
+  - El resultado se añade al contrato de salida como videoUrl.
+
+- Se ha reforzado la extracción de medios nativos.
+  - Las imágenes adjuntas en app.bsky.embed.images se descargan en calidad real, no como miniaturas, y se guardan con nombre tipo img_<rkey>_<indice>.jpg.
+  - Esto mejora la calidad del contenido que luego se publica en Substack.
+
+- Se ha ampliado la clasificación del post.
+  - Antes el script distinguía sobre todo texto, enlace, Bandcamp y media.
+  - Ahora también detecta posts de tipo video, con la variable postType = 'video'.
+  - El contenido final generado en post.json incluye:
+    - uri
+    - rkey
+    - createdAt
+    - type
+    - text
+    - mediaUrls
+    - externalLink
+    - videoUrl
+
+- Se ha integrada la ejecución automática del publicador.
+  - Cuando el extractor detecta un post pendiente, genera el contrato y lanza directamente node 2_publicar_substack.mjs.
+  - Además, si el post es Bandcamp o un hilo con Bandcamp, puede lanzar enriquecimiento previo antes de publicar.
+
+- Se mantiene la lógica de historial y reintentos.
+  - El script sigue registrando estados en history.json.
+  - Si se repite un fallo varias veces, marca el contenido para revisión manual.
+  - Todo esto se hace de forma robusta con lock, intentos y limpieza del directorio temporal.
+
+2) Novedades en 2_publicar_substack.mjs
+
+- Se ha añadido la gestión explícita de vídeos en la publicación.
+  - Si post.json contiene videoUrl y el archivo existe localmente, el script lo sube a Substack como media de tipo video.
+  - Para ello busca un input de tipo file que acepte vídeo, y si no existe un input específico, prueba con el primer input disponible.
+  - Se espera más tiempo para que Substack procese el vídeo antes de continuar.
+
+- Se ha separado claramente el flujo de subida de imágenes y vídeo.
+  - El vídeo se maneja en un bloque independiente del de imágenes, evitando conflictos cuando un post tiene uno u otro tipo de media.
+  - Esto permite publicar contenido con vídeo sin que se mezclen los flujos de imagen y video.
+
+- Se ha mejorado la lógica de preparación del texto y enlaces externos.
+  - Si el post es un link con imágenes, el enlace se extrae del texto y se añade al final, después de subir la imagen.
+  - Si el post es Bandcamp con portada grande, se añade el enlace al final también para conservar la referencia y la cabecera visual.
+  - Si no hay imágenes, el enlace se deja suelto para que Substack genere la tarjeta automática.
+
+- Se ha reforzado la interacción con el editor de Substack Notes.
+  - El script abre el editor, escribe el texto, carga imágenes o vídeo, añade el enlace si corresponde y pulsa el botón "Post".
+  - Se comprueba si el botón está habilitado antes de publicar.
+
+- Se ha añadido confirmación por red y registro de éxito.
+  - Tras publicar, se espera la respuesta HTTP de la red y, si funciona, se marca el post como SUCCESS en history.json.
+  - Después se elimina post.json para dejar el sistema preparado para el siguiente contenido.
+
+- Se limpia el estado temporal al final.
+  - El script borra el contenido de temp_media tras cada publicación para evitar que queden archivos antiguos o duplicados.
+
+En resumen:
+
+El flujo ya no solo extrae texto o imágenes de Bluesky; ahora también prepara vídeos nativos para ser publicados en Substack. A su vez, el publicador ahora sabe cómo redactar el texto, subir media, decidir dónde poner el enlace externo y confirmar la publicación, dejando todo el historial y la limpieza del sistema automatizados.

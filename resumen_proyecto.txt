@@ -1,0 +1,290 @@
+RESUMEN DEL PROYECTO blu_para_sub
+================================
+
+Descripcion general
+--------------------
+Proyecto Node.js y PHP para automatizar la extraccion de publicaciones propias
+de Bluesky y su republicacion en Substack Notes. El flujo principal detecta
+publicaciones nuevas, prepara un contrato JSON temporal, descarga miniaturas
+cuando es necesario y publica el contenido mediante un navegador automatizado.
+
+Flujo principal
+---------------
+1. 1_extraer_bluesky.mjs inicia sesion en Bluesky y consulta hasta 30 posts
+  propios, incluyendo respuestas necesarias para detectar hilos.
+2. history.json evita volver a procesar publicaciones ya conocidas o publicadas.
+3. Para el primer arranque se crea una linea base y no se publica nada.
+4. Para cada post nuevo se agrupan los posts sueltos o los hilos y se genera
+  post.json o thread.json; tambien se prepara temp_media/.
+5. El extractor lanza 2_publicar_substack.mjs para posts individuales o
+  3_publicar_hilo.cjs para hilos.
+6. El publicador abre Substack Notes, inserta texto e imagenes, publica y
+  registra el resultado SUCCESS en history.json.
+7. 3_publicar_hilo.cjs publica varios posts de thread.json de forma secuencial
+  y registra cada eslabon publicado en history.json.
+8. 4_enriquecer_bandcamp.mjs puede sustituir la miniatura de Bandcamp por la
+  portada grande obtenida de la pagina del album.
+9. 4_enriquecer_imagen_card.cjs conserva la utilidad anterior para descargar
+  miniaturas de tarjetas Bandcamp desde su URL.
+
+SCRIPTS
+=======
+
+1_extraer_bluesky.mjs
+---------------------
+Extractor y orquestador del flujo individual.
+
+- Carga credenciales desde config/.env mediante dotenv.
+- Usa @atproto/api para iniciar sesion en https://bsky.social.
+- Consulta el feed del usuario con filter posts_with_replies y limit 30.
+- Obtiene el DID del perfil y filtra para conservar solo publicaciones propias.
+- Agrupa respuestas propias con su post raiz para procesar hilos completos.
+- Usa process.lock para impedir dos ejecuciones simultaneas durante 15 minutos.
+- Lee history.json. Si no existe o esta vacio, registra los posts actuales como
+  INITIAL_BASELINE y termina sin publicar.
+- Ignora posts ya marcados como SUCCESS, INITIAL_BASELINE o
+  SKIPPED_MANUAL_REVIEW.
+- Escoge la unidad pendiente mas antigua, que puede ser un post o un hilo.
+- Registra los intentos en attempts.json y, tras cinco fallos, marca la unidad
+  como SKIPPED_MANUAL_REVIEW para revision manual.
+- Clasifica enlaces externos como bandcamp o link.
+- Descarga la miniatura de un enlace externo a temp_media/ cuando existe.
+- Descarga imagenes nativas adjuntas usando el endpoint getBlob de AT Protocol.
+- Genera post.json con uri, rkey, fecha, tipo, texto, mediaUrls y externalLink.
+- Genera thread.json con los datos de todos los eslabones cuando detecta un hilo.
+- Intenta enriquecer Bandcamp con una portada grande antes de publicar.
+- Ejecuta 2_publicar_substack.mjs o 3_publicar_hilo.cjs mediante execSync.
+- Elimina el bloqueo al terminar, incluso cuando se produce un error.
+
+2_publicar_substack.mjs
+-----------------------
+Publicador de un post individual en Substack Notes.
+
+- Usa puppeteer-extra con el plugin stealth para automatizar Chromium.
+- Lee las cookies de sesion de Substack desde config/.env.
+- Abre https://substack.com/notes y espera a que cargue el editor.
+- Sale sin publicar si no existe post.json.
+- Lee el contrato generado por el extractor.
+- Escribe el texto en el editor contenteditable.
+- Sube las imagenes locales indicadas en mediaUrls.
+- Si hay imagen y enlace externo, quita el enlace del texto y lo vuelve a
+  anadir al final. Para enlaces sin imagen tambien anade la URL al final.
+- Hace clic en el boton Post y espera una respuesta HTTP POST relacionada con
+  comment, note o feed.
+- Si la respuesta es correcta, anade un registro SUCCESS a history.json y
+  elimina post.json.
+- Cierra el navegador y limpia temp_media al finalizar.
+
+3_publicar_hilo.cjs
+------------------
+Publicador secuencial de hilos almacenados en thread.json.
+
+- Usa CommonJS (require) y la extension .cjs para funcionar aunque package.json
+  declare type module.
+- Valida que thread.json exista y contenga al menos un elemento.
+- Abre Substack Notes con Puppeteer y las cookies de config/.env.
+- Procesa cada elemento del array en orden.
+- Escribe el texto completo mediante document.activeElement y eventos input y
+  change, evitando perdidas de caracteres al simular pulsaciones.
+- Sube las imagenes indicadas por hasMedia y mediaUrls.
+- Anade enlaces externos al final cuando corresponde.
+- Publica cada eslabon y comprueba una respuesta HTTP relacionada con la nota.
+- Espera cinco segundos entre publicaciones para reducir el riesgo de
+  limitaciones de frecuencia.
+- Cierra el navegador al terminar.
+- Registra cada eslabon confirmado como SUCCESS en history.json.
+- Elimina thread.json cuando todo el hilo termina correctamente y lo conserva
+  si la publicacion queda incompleta.
+
+4_enriquecer_bandcamp.mjs
+---------------------------
+Enriquecedor de portadas grandes de publicaciones Bandcamp.
+
+- Lee la etiqueta meta og:image de la pagina del album Bandcamp.
+- Procesa post.json y thread.json si existen.
+- Acepta tanto un objeto individual como un array de posts.
+- Descarga la portada grande como bandcamp_grande_<rkey>.jpg en temp_media/.
+- Sustituye mediaUrls cuando encuentra una portada valida y reescribe el JSON
+  solo cuando hubo cambios.
+- Si falla, conserva la miniatura que ya tenia el contrato para no bloquear la
+  publicacion.
+
+4_enriquecer_imagen_card.cjs
+----------------------------
+Enriquecedor anterior de miniaturas Bandcamp.
+
+- Usa axios para descargar la miniatura desde externalLink.thumbUrl.
+- Procesa post.json y thread.json si existen, tanto si contienen un objeto
+  como si contienen un array.
+- Guarda los archivos como bandcamp_<rkey>.jpg en temp_media/ y agrega sus
+  rutas a mediaUrls evitando duplicados.
+- Actualmente queda como utilidad independiente; el flujo principal usa
+  4_enriquecer_bandcamp.mjs para la portada grande.
+
+setup_login.mjs
+---------------
+Utilidad de configuracion inicial para crear un perfil autenticado de Substack.
+
+- Debe ejecutarse manualmente una sola vez en local.
+- Abre Chromium con ventana visible y guarda los datos en chrome_profile/.
+- Navega a https://substack.com/sign-in para que el usuario inicie sesion.
+- Mantiene la ventana abierta durante tres minutos para completar el login.
+- Cierra el navegador y deja el perfil preparado para reutilizarlo en el
+  servidor.
+- Usa Puppeteer con el plugin stealth, pero no lee ni modifica los JSON de
+  publicaciones.
+
+ARCHIVOS JSON
+=============
+
+package.json
+------------
+Manifesto del proyecto Node.js.
+
+- Proyecto: blu_para_sub, version 1.0.0.
+- Declara type module.
+- Dependencias directas: @atproto/api, axios, dotenv, puppeteer,
+  puppeteer-extra y puppeteer-extra-plugin-stealth.
+- No tiene una prueba automatizada configurada: npm test termina con un error
+  intencionado indicando que no hay tests.
+- El campo main apunta a index.js, archivo que no aparece en la lista actual.
+
+package-lock.json
+-----------------
+Lockfile npm version 3 generado para fijar versiones concretas y hashes de
+integridad de las dependencias Node.js.
+
+- Repite las dependencias directas de package.json.
+- Registra las versiones resueltas y dependencias transitivas de npm.
+- Incluye entre otras @atproto/api 0.20.34 y la informacion de Puppeteer,
+  Axios, dotenv y los plugins extra.
+- Su objetivo es que npm install reproduzca el mismo arbol de paquetes.
+- No es logica de la aplicacion y no debe editarse manualmente salvo casos
+  excepcionales.
+
+composer.json
+-------------
+Configuracion de dependencias PHP.
+
+- Requiere guzzlehttp/guzzle ^7.15 para peticiones HTTP.
+- Requiere vlucas/phpdotenv ^5.6 para cargar variables de entorno.
+- Relaciona la parte PHP del proyecto con publish_to_substack.php e index.php.
+
+composer.lock
+-------------
+Lockfile de Composer.
+
+- Fija las versiones exactas de las dependencias PHP y sus dependencias
+  transitivas.
+- Incluye Guzzle, PSR, Symfony polyfills, phpdotenv y librerias auxiliares.
+- Permite reproducir el mismo entorno PHP usando composer install.
+- Es un archivo generado de dependencias, no un flujo ejecutable por si mismo.
+
+history.json
+------------
+Registro persistente del estado de procesamiento de posts de Bluesky.
+
+- Es un array de objetos con uri, status, createdAt y timestamp.
+- INITIAL_BASELINE representa posts presentes durante el primer arranque y
+  evita publicarlos retroactivamente.
+- SUCCESS representa posts publicados correctamente en Substack.
+- SKIPPED_MANUAL_REVIEW representa unidades que superaron cinco intentos y
+  quedan apartadas para revision manual.
+- En el estado actual hay 26 entradas INITIAL_BASELINE, 64 SUCCESS y 3
+  SKIPPED_MANUAL_REVIEW.
+- 1_extraer_bluesky.mjs lo consulta para detectar pendientes.
+- 2_publicar_substack.mjs y 3_publicar_hilo.cjs lo actualizan despues de una
+  confirmacion HTTP exitosa.
+
+attempts.json
+-------------
+Registro de intentos consecutivos para unidades pendientes.
+
+- 1_extraer_bluesky.mjs incrementa el contador antes de cada procesamiento.
+- Cuando una unidad supera MAX_ATTEMPTS (5), sus posts se marcan como
+  SKIPPED_MANUAL_REVIEW en history.json y se elimina su contador.
+- Su contenido es operativo y puede cambiar en cada ejecucion.
+
+thread.json
+-----------
+Entrada temporal de datos para publicar un hilo.
+
+- Actualmente no existe; 1_extraer_bluesky.mjs lo genera solo cuando detecta un
+  hilo pendiente.
+- Cada elemento contiene uri, rkey, text, hashtags, createdAt, hasMedia,
+  mediaType, mediaUrls, externalLink y video.
+- 3_publicar_hilo.cjs lo lee en orden y publica cada elemento.
+- Las rutas de mediaUrls se esperan como rutas locales accesibles desde el
+  proceso que ejecuta el script.
+
+post_real.json.bak
+------------------
+Copia de seguridad con extension .bak.
+
+- El archivo existe, pero actualmente esta vacio.
+- No participa automaticamente en el flujo porque los scripts buscan
+  post.json, no post_real.json.bak.
+
+JSON DE chrome_profile/
+=======================
+
+La carpeta chrome_profile/ es un perfil generado por Chromium para conservar
+la sesion de Substack creada por setup_login.mjs. Sus JSON no forman parte del
+modelo de datos de la aplicacion:
+
+- CertificateRevocation/10767/manifest.json: manifiesto de un componente
+  interno de Chromium relacionado con revocacion de certificados.
+- CertificateRevocation/10767/_metadata/verified_contents.json: hashes y firmas
+  que verifican los archivos del componente anterior.
+- component_crx_cache/metadata.json: mapa de hashes de componentes CRX en la
+  cache del navegador.
+- extensions_crx_cache/metadata.json: metadatos de la cache de extensiones CRX;
+  actualmente no contiene entradas.
+- Subresource Filter/Unindexed Rules/9.71.0/manifest.json: manifiesto de las
+  reglas internas de filtrado de recursos del navegador.
+- Subresource Filter/Unindexed Rules/9.71.0/_metadata/verified_contents.json:
+  hashes y firmas de verificacion de esas reglas.
+
+Estos archivos se regeneran o actualizan con Chromium y no deben editarse
+manualmente.
+
+ARCHIVOS JSON TEMPORALES ESPERADOS
+==================================
+
+post.json
+---------
+No existe actualmente, pero 1_extraer_bluesky.mjs lo genera para entregar un
+post individual a 2_publicar_substack.mjs. Contiene uri, rkey, createdAt, type,
+text, mediaUrls y externalLink. El publicador lo elimina despues de una
+publicacion confirmada.
+
+CONFIGURACION Y EXCLUSIONES
+============================
+
+- config/.env contiene secretos y cookies de Bluesky/Substack; no se incluye
+  su contenido en este resumen.
+- temp_media/ almacena temporalmente imagenes descargadas y se limpia despues
+  de publicar un post individual. Tambien contiene portadas grandes de
+  Bandcamp mientras se prepara un contrato.
+- node_modules/ y vendor/ son dependencias instaladas y quedan fuera del
+  resumen detallado, tal como se solicito. Los JSON de chrome_profile/ sí se
+  han omitido porque chrome_profile/ tambien esta excluida por .gitignore.
+- extractor.log y las imagenes debug_imagenes_subidas.png y
+  debug_imagen_subida.png son archivos auxiliares de ejecuciones y depuracion;
+  no forman parte del flujo principal.
+- index.php, publish_to_substack.php y feed.xml existen en el proyecto, pero
+  no se detallan porque la solicitud se limita a scripts JS/MJS y JSON.
+
+Observaciones tecnicas
+----------------------
+
+- La automatizacion depende de selectores concretos de la interfaz de
+  Substack, como inlineComposer-v8PLSi y el boton Post.
+- Las cookies de Substack deben estar vigentes y definidas en config/.env.
+- La declaracion type module de package.json y el uso de require en
+  3_publicar_hilo.cjs deben mantenerse alineados con la extension .cjs.
+- La deteccion de exito depende de observar una respuesta de red; si Substack
+  cambia sus endpoints, el script puede publicar sin confirmarlo o no detectar
+  correctamente el resultado.
+- El lock process.lock y los demas archivos operativos se resuelven usando
+  __dirname; conviene ejecutar el extractor desde la raiz del proyecto.
