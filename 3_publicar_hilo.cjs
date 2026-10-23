@@ -90,7 +90,7 @@ function marcarComoExitoso(uri, createdAt) {
             console.log(`\n--- Publicando eslabón [${i + 1} de ${threadPosts.length}] (rkey: ${postData.rkey}) ---`);
 
             console.log("🔍 Abriendo el editor...");
-            const composerSelector = 'div.inlineComposer-v8PLSi';
+            const composerSelector = 'div[class*="inlineComposer"]';
 
             try {
                 await page.waitForSelector(composerSelector, { visible: true, timeout: 8000 });
@@ -113,7 +113,7 @@ function marcarComoExitoso(uri, createdAt) {
             }
 
             console.log("📝 Escribiendo texto en el editor...");
-            const editorHandle = await page.$('div.inlineComposer-v8PLSi [contenteditable="true"]');
+            const editorHandle = await page.$('div[class*="inlineComposer"] [contenteditable="true"]');
             if (editorHandle) {
                 await editorHandle.click();
             }

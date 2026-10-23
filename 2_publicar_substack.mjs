@@ -70,7 +70,7 @@ const HISTORY_FILE = path.join(__dirname, 'history.json');
         // SECCIÓN 3: ABRIR EL EDITOR DE SUBSTACK
         // ============================================================
         console.log("🔍 Abriendo el editor...");
-        const composerSelector = 'div.inlineComposer-v8PLSi';
+        const composerSelector = 'div[class*="inlineComposer"]';
         await page.waitForSelector(composerSelector, { visible: true, timeout: 8000 });
         await page.click(composerSelector);
         console.log("🖱️ ¡Editor abierto!");
@@ -101,7 +101,7 @@ const HISTORY_FILE = path.join(__dirname, 'history.json');
         // SECCIÓN 5: ESCRIBIR EL TEXTO EN EL EDITOR
         // ============================================================
         console.log("📝 Asegurando foco y escribiendo texto en el editor...");
-        const editorHandle = await page.$('div.inlineComposer-v8PLSi [contenteditable="true"]');
+        const editorHandle = await page.$('div[class*="inlineComposer"] [contenteditable="true"]');
         if (editorHandle) {
             await editorHandle.click();
         }
